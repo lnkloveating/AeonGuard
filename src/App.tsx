@@ -9,6 +9,7 @@ import { Terminal, Shield, Cpu, Activity, Lock, User, ChevronRight, FastForward,
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import PodsPage from './pages/PodsPage';
+import HabitatPage from './pages/HabitatPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 
 const USERS = [
@@ -1059,7 +1060,7 @@ export default function App() {
         <Route path="/" element={<LoginView />} />
         <Route path="/dashboard" element={<HomePage />} />
         <Route path="/dashboard/pods" element={<PodsPage />} />
-        <Route path="/dashboard/habitat" element={<PlaceholderPage title="环境警报 HABITAT" />} />
+        <Route path="/dashboard/habitat" element={<HabitatPage />} />
         <Route path="/dashboard/ai" element={<PlaceholderPage title="AI推理引擎 AI ENGINE" />} />
         <Route path="/dashboard/override" element={<PlaceholderPage title="人工决策 OVERRIDE" />} />
         <Route path="/dashboard/mission" element={<PlaceholderPage title="任务档案 MISSION LOG" />} />
