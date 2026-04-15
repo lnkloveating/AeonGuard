@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+html, body, #root {
+  background-color: #000d1a;
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(6, 182, 212, 0.05);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(6, 182, 212, 0.2);
+    border-radius: 2px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(6, 182, 212, 0.4);
+  }
+}
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes orbit {
+  from { transform: rotate(0deg) translateX(20px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(20px) rotate(-360deg); }
+}
+
+@keyframes data-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
