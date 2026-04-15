@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Terminal, 
-  Home, 
-  Database, 
-  AlertTriangle, 
-  Cpu, 
-  Zap, 
-  FileText, 
-  Users, 
-  ClipboardList, 
-  Settings, 
+import {
+  Terminal,
+  Home,
+  Database,
+  AlertTriangle,
+  Cpu,
+  Zap,
+  FileText,
+  Users,
+  ClipboardList,
+  Settings,
   LogOut,
   ChevronRight,
   ChevronLeft,
@@ -515,10 +515,10 @@ export default function HomePage() {
 
                       {/* Background stars — 35 fixed-seed positions */}
                       {[
-                        [12,8],[45,14],[78,5],[112,22],[155,11],[188,18],[23,38],[67,42],[134,35],
-                        [170,45],[9,62],[52,58],[95,50],[143,55],[180,68],[30,88],[85,95],[120,92],
-                        [160,85],[15,110],[55,118],[100,105],[140,115],[175,108],[35,135],[75,128],
-                        [110,140],[150,132],[190,145],[5,148],[48,150],[90,155],[128,148],[165,152],[195,30]
+                        [12, 8], [45, 14], [78, 5], [112, 22], [155, 11], [188, 18], [23, 38], [67, 42], [134, 35],
+                        [170, 45], [9, 62], [52, 58], [95, 50], [143, 55], [180, 68], [30, 88], [85, 95], [120, 92],
+                        [160, 85], [15, 110], [55, 118], [100, 105], [140, 115], [175, 108], [35, 135], [75, 128],
+                        [110, 140], [150, 132], [190, 145], [5, 148], [48, 150], [90, 155], [128, 148], [165, 152], [195, 30]
                       ].map(([cx, cy], i) => (
                         <circle key={`bg-${i}`} cx={cx} cy={cy}
                           r={0.5 + ((i * 7 + 3) % 4) * 0.5}
@@ -869,7 +869,8 @@ export default function HomePage() {
         </main>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }

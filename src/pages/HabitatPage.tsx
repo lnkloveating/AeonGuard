@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import {
   Terminal, Home, Database, AlertTriangle, Cpu, Zap, FileText,
   Users, ClipboardList, Settings, LogOut, RefreshCw,
@@ -33,8 +37,8 @@ const FLOOR_ZONES: Record<FloorId, Zone[]> = {
     { id: 'B3-E2', label: '能源区 B', type: 'ENERGY', status: 'NOMINAL' },
   ],
   B4: [
-    { id: 'B4-C1', label: '核心区 A', type: 'CORE', status: 'NOMINAL' },
-    { id: 'B4-C2', label: '核心区 B', type: 'CORE', status: 'NOMINAL' },
+    { id: 'B4-C1', label: '反应堆区 A', type: 'REACTOR', status: 'NOMINAL' },
+    { id: 'B4-C2', label: '反应堆区 B', type: 'REACTOR', status: 'NOMINAL' },
   ],
 };
 
@@ -45,8 +49,8 @@ const ZONE_DATA: Record<string, { oxygen: number; radiation: number; pressure: n
   'B2-I2': { oxygen: 84.0, radiation: 11.2, pressure: 105.1 },
   'B3-E1': { oxygen: 80.5, radiation: 22.3, pressure: 99.8 },
   'B3-E2': { oxygen: 82.1, radiation: 19.7, pressure: 101.5 },
-  'B4-C1': { oxygen: 78.3, radiation: 24.1, pressure: 97.4 },
-  'B4-C2': { oxygen: 79.1, radiation: 23.8, pressure: 98.1 },
+  'B4-C1': { oxygen: 42.1, radiation: 89.3, pressure: 142.5 },
+  'B4-C2': { oxygen: 38.7, radiation: 94.1, pressure: 156.2 },
 };
 
 // ─── Atmospheric background canvas (environment / chemical feel) ─
@@ -428,7 +432,15 @@ function EnvironmentHeatmap({ selectedZone, onSelectZone }: {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
             {ZONE_GRID.flat().map(zoneId => {
               const val = ZONE_DATA[zoneId][sensor.key];
-              const bgColor = getHeatColor(val, sensor.min, sensor.max, sensor.safeMin, sensor.safeMax);
+              
+              let min = sensor.min; let max = sensor.max;
+              let safeMin = sensor.safeMin; let safeMax = sensor.safeMax;
+              if (zoneId.startsWith('B4')) {
+                if (sensor.key === 'oxygen') { min = 20; max = 100; safeMin = 35; safeMax = 50; }
+                if (sensor.key === 'radiation') { min = 0; max = 150; safeMin = 0; safeMax = 100; }
+                if (sensor.key === 'pressure') { min = 100; max = 200; safeMin = 130; safeMax = 170; }
+              }
+              const bgColor = getHeatColor(val, min, max, safeMin, safeMax);
               const isSelected = selectedZone === zoneId;
               return (
                 <div key={zoneId} onClick={() => onSelectZone(zoneId)}
@@ -467,6 +479,374 @@ function EnvironmentHeatmap({ selectedZone, onSelectZone }: {
         </div>
       ))}
     </div>
+  );
+}
+
+// ─── 3D Habitat Viewer ───────────────────────────────────────────
+
+function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFloor: string, selectedZone: string, zoneStatuses: Record<string, ZoneStatus> }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const b3ObjectsRef = useRef<THREE.Object3D[]>([]);
+  const b4ObjectsRef = useRef<{ mesh: THREE.Object3D, isLight?: boolean, isRing?: boolean, ringIndex?: number }[]>([]);
+  const timeRef = useRef(0);
+  const activeFloorRef = useRef(activeFloor);
+  
+  useEffect(() => { activeFloorRef.current = activeFloor; }, [activeFloor]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+    scene.background = new THREE.Color(0x000810);
+    scene.fog = new THREE.FogExp2(0x000d1a, 0.0008);
+
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 3000);
+    camera.position.set(0, 300, 600);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.domElement.style.position = 'absolute';
+    renderer.domElement.style.top = '0';
+    renderer.domElement.style.left = '0';
+    renderer.domElement.style.zIndex = '1';
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.autoRotate = false;
+    controls.enableRotate = true;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Attach refs for external effects early
+    (container as any)._camera = camera;
+    (container as any)._controls = controls;
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0x112233, 1.2);
+    scene.add(ambient);
+    (container as any)._ambientLight = ambient;
+
+    const topLight = new THREE.DirectionalLight(0x00aaff, 0.6);
+    topLight.position.set(0, 500, 0);
+    scene.add(topLight);
+
+    const bottomLight = new THREE.PointLight(0xff6600, 1.2, 800);
+    bottomLight.position.set(0, -200, 0);
+    scene.add(bottomLight);
+
+    const rimLight = new THREE.DirectionalLight(0x00e5ff, 0.3);
+    rimLight.position.set(0, 100, 500);
+    scene.add(rimLight);
+
+    // B3 Energy Towers (Procedural Additions)
+    const towerGeo = new THREE.CylinderGeometry(8, 8, 120, 8);
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0xff6600, metalness: 0.8, roughness: 0.2 });
+    const positions = [ [-100, 60, -80], [100, 60, -80], [-100, 60, 80], [100, 60, 80] ];
+    positions.forEach(pos => {
+      const tower = new THREE.Mesh(towerGeo, towerMat);
+      tower.position.set(pos[0], pos[1], pos[2]);
+      const l = new THREE.PointLight(0xffaa00, 1, 300);
+      l.position.set(0, 60, 0); // top of cylinder
+      tower.add(l);
+      tower.visible = false; // Hide initially
+      scene.add(tower);
+      b3ObjectsRef.current.push(tower);
+    });
+
+    // Models
+    const loader = new GLTFLoader();
+    const modelConfigs = [
+      { file: '/models/r1.glb', position: [-150, 0, 0], name: 'r1', zone: 'B1-R1', label: '居民区 A' },
+      { file: '/models/r2.glb', position: [150, 0, 0],  name: 'r2', zone: 'B1-R2', label: '居民区 B' },
+      { file: '/models/i1.glb', position: [-150, 0, 0], name: 'i1', zone: 'B2-I1', label: '工业区 A' },
+      { file: '/models/i2.glb', position: [150, 0, 0],  name: 'i2', zone: 'B2-I2', label: '工业区 B' },
+    ];
+
+    const modelsMap = new Map<string, THREE.Group>();
+
+    modelConfigs.forEach(config => {
+      loader.load(config.file, (gltf) => {
+        const model = gltf.scene;
+        model.position.set(...(config.position as [number, number, number]));
+
+        const isResidential = config.name.toLowerCase().startsWith('r');
+        model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.material = new THREE.MeshStandardMaterial({
+              color: new THREE.Color(isResidential ? 0x0a2a3a : 0x1a1200),
+              emissive: new THREE.Color(isResidential ? 0x003355 : 0x331800),
+              emissiveIntensity: 0.4,
+              metalness: 0.7,
+              roughness: 0.4,
+            });
+            const edges = new THREE.EdgesGeometry(child.geometry);
+            const lineMat = new THREE.LineBasicMaterial({
+              color: isResidential ? 0x00e5ff : 0xffaa00,
+              transparent: true,
+              opacity: 0.25,
+            });
+            child.add(new THREE.LineSegments(edges, lineMat));
+          }
+        });
+        scene.add(model);
+        modelsMap.set(config.zone, model);
+      });
+    });
+
+    const onResize = () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    };
+    // Need a ResizeObserver because flex layout could resize the div without window resize event
+    const resizeObserver = new ResizeObserver(() => {
+      onResize();
+    });
+    resizeObserver.observe(container);
+
+    let rafId: number;
+    const animate = () => {
+      rafId = requestAnimationFrame(animate);
+      
+      const t = timeRef.current;
+      timeRef.current += 0.01;
+      
+      const floor = activeFloorRef.current;
+      if (floor === 'B3') {
+        b3ObjectsRef.current.forEach((tower, i) => {
+          const light = tower.children.find(c => c instanceof THREE.PointLight) as THREE.PointLight | undefined;
+          if (light) light.intensity = 0.8 + Math.sin(t * 2 + i) * 0.4;
+        });
+      } else if (floor === 'B4') {
+        const objs = b4ObjectsRef.current;
+        objs.forEach(obj => {
+          if (obj.isRing) {
+             const idx = obj.ringIndex || 0;
+             if (idx % 3 === 0) obj.mesh.rotation.z += 0.005;
+             else if (idx % 3 === 1) obj.mesh.rotation.z -= 0.003;
+             else obj.mesh.rotation.x += 0.004;
+          }
+          if (obj.isLight) {
+             (obj.mesh as THREE.PointLight).intensity = 1.0 + Math.sin(t * 2 + (obj.ringIndex || 0) * 0.7) * 0.5;
+          }
+        });
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Attach to DOM element for the other useEffect
+    (container as any)._modelsMap = modelsMap;
+
+    return () => {
+      resizeObserver.disconnect();
+      renderer.dispose();
+      container.innerHTML = '';
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  // Camera reset logic
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const camera = (containerRef.current as any)._camera as THREE.PerspectiveCamera;
+    const controls = (containerRef.current as any)._controls as OrbitControls;
+    if (camera && controls) {
+      camera.position.set(0, 300, 600);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+  }, [activeFloor]);
+
+  // Update logic when activeFloor, selectedZone or zoneStatuses changes
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    if (activeFloor === 'B4') {
+      scene.background = new THREE.Color(0x0a0000);
+      scene.fog = new THREE.FogExp2(0x110000, 0.001);
+    } else {
+      scene.background = new THREE.Color(0x000810);
+      scene.fog = new THREE.FogExp2(0x000d1a, 0.0008);
+    }
+
+    if (activeFloor !== 'B4' && b4ObjectsRef.current.length > 0) {
+      b4ObjectsRef.current.forEach(({ mesh }) => {
+        scene.remove(mesh);
+        if ((mesh as any).geometry) (mesh as any).geometry.dispose();
+        if ((mesh as any).material) {
+           const mat = (mesh as any).material;
+           if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+           else mat.dispose();
+        }
+      });
+      b4ObjectsRef.current = [];
+    }
+
+    const ambLight = (containerRef.current as any)._ambientLight as THREE.AmbientLight;
+    if (ambLight) {
+      if (activeFloor === 'B4') {
+        ambLight.color.setHex(0x221100);
+        ambLight.intensity = 1.0;
+      } else {
+        ambLight.color.setHex(0x112233);
+        ambLight.intensity = 1.2;
+      }
+    }
+
+    if (activeFloor === 'B4' && b4ObjectsRef.current.length === 0) {
+       function createCylinder(start: number[], end: number[], radius: number, mat: THREE.Material) {
+         const dir = new THREE.Vector3(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+         const len = dir.length();
+         const geo = new THREE.CylinderGeometry(radius, radius, len, 8);
+         const mesh = new THREE.Mesh(geo, mat);
+         mesh.position.set((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2);
+         mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+         return mesh;
+       }
+
+       const reactorPositions = [
+         [-240, 80, -180], [0, 90, -180], [240, 80, -180],
+         [-240, 85, 0],    [0, 100, 0],   [240, 85, 0],
+         [-240, 80, 180],  [0, 90, 180],  [240, 80, 180],
+       ];
+
+       reactorPositions.forEach(([x, y, z], i) => {
+         let innerRadius = 18;
+         let outerGlow = 26;
+         if (i === 4) {
+           innerRadius = 24;
+           outerGlow = 34; // Center reactor
+         } else if (i === 0 || i === 2 || i === 6 || i === 8) {
+           innerRadius = 15;
+           outerGlow = 22; // Corner reactors
+         }
+
+         const glowGeo = new THREE.SphereGeometry(outerGlow, 32, 32);
+         const glowMat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff4400, emissiveIntensity: 1.5, transparent: true, opacity: 0.15 });
+         const glow = new THREE.Mesh(glowGeo, glowMat);
+         glow.position.set(x, y, z);
+         scene.add(glow);
+         b4ObjectsRef.current.push({ mesh: glow });
+
+         const coreGeo = new THREE.SphereGeometry(innerRadius, 32, 32);
+         const coreMat = new THREE.MeshStandardMaterial({ color: 0xff5500, emissive: 0xff3300, emissiveIntensity: 2.0, metalness: 0.2, roughness: 0.8 });
+         const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+         coreMesh.position.set(x, y, z);
+         scene.add(coreMesh);
+         b4ObjectsRef.current.push({ mesh: coreMesh });
+
+         const ringGeo = new THREE.TorusGeometry(outerGlow + 4, 1.5, 8, 48);
+         const ringMat = new THREE.MeshBasicMaterial({ color: i === 4 ? 0xff4400 : i % 2 === 0 ? 0xff8800 : 0xffaa00, transparent: true, opacity: 0.7 });
+         const ring = new THREE.Mesh(ringGeo, ringMat);
+         ring.position.set(x, y, z);
+         ring.rotation.x = Math.PI / 3 + i * 0.3;
+         scene.add(ring);
+         b4ObjectsRef.current.push({ mesh: ring, isRing: true, ringIndex: i });
+
+         const light = new THREE.PointLight(0xff4400, 1.2, 200);
+         light.position.set(x, y, z);
+         scene.add(light);
+         b4ObjectsRef.current.push({ mesh: light, isLight: true, ringIndex: i });
+       });
+
+       const connections = [
+         [0,1],[1,2],  // top row
+         [3,4],[4,5],  // middle row
+         [6,7],[7,8],  // bottom row
+         [0,3],[3,6],  // left column
+         [1,4],[4,7],  // center column
+         [2,5],[5,8],  // right column
+       ];
+       const pipeMat = new THREE.MeshStandardMaterial({ color: 0x331100, metalness: 0.9, roughness: 0.2 });
+       connections.forEach(([from, to]) => {
+         const p1 = reactorPositions[from];
+         const p2 = reactorPositions[to];
+         const pipe = createCylinder(p1, p2, 4, pipeMat);
+         scene.add(pipe);
+         b4ObjectsRef.current.push({ mesh: pipe });
+       });
+    }
+
+    // Toggle B3 towers
+    b3ObjectsRef.current.forEach(t => t.visible = (activeFloor === 'B3'));
+
+    const modelsMap = (containerRef.current as any)._modelsMap as Map<string, THREE.Group>;
+    
+    if (modelsMap) {
+      modelsMap.forEach((model, zoneId) => {
+        // Handle visibility based on activeFloor
+        if (activeFloor === 'B1') {
+          model.visible = zoneId === 'B1-R1' || zoneId === 'B1-R2';
+        } else if (activeFloor === 'B2') {
+          model.visible = zoneId === 'B2-I1' || zoneId === 'B2-I2';
+        } else if (activeFloor === 'B3') {
+          model.visible = zoneId === 'B1-R1' || zoneId === 'B1-R2';
+        } else if (activeFloor === 'B4') {
+          model.visible = zoneId === 'B2-I1'; // Use i1.glb as base
+        } else {
+          model.visible = false;
+        }
+
+        const isSelected = zoneId === selectedZone;
+        
+        model.traverse(child => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+            const isRes = zoneId.includes('R1') || zoneId.includes('R2');
+            
+            if (activeFloor === 'B3') {
+              child.material.color.setHex(0x2a1500);
+              child.material.emissive.setHex(0x552200);
+              child.material.emissiveIntensity = isSelected && model.visible ? 1.0 : 0.6;
+              child.material.metalness = 0.8;
+              child.material.roughness = 0.3;
+            } else if (activeFloor === 'B4' && zoneId === 'B2-I1') {
+              child.material.color.setHex(0x1a0500);
+              child.material.emissive.setHex(0x330800);
+              child.material.emissiveIntensity = isSelected && model.visible ? 1.0 : 0.5;
+              child.material.metalness = 0.9;
+              child.material.roughness = 0.3;
+            } else {
+              child.material.color.setHex(isRes ? 0x0a2a3a : 0x1a1200);
+              child.material.emissive.setHex(isRes ? 0x003355 : 0x331800);
+              child.material.emissiveIntensity = isSelected && model.visible ? 1.0 : 0.4;
+              child.material.metalness = 0.7;
+              child.material.roughness = 0.4;
+            }
+          }
+
+          if (child instanceof THREE.LineSegments && child.material instanceof THREE.LineBasicMaterial) {
+             const isRes = zoneId.includes('R1') || zoneId.includes('R2');
+             if (activeFloor === 'B3') {
+               child.material.color.setHex(0xffaa00);
+               child.material.opacity = 0.25;
+             } else if (activeFloor === 'B4' && zoneId === 'B2-I1') {
+               child.material.color.setHex(0xff4400);
+               child.material.opacity = 0.3;
+             } else {
+               child.material.color.setHex(isRes ? 0x00e5ff : 0xffaa00);
+               child.material.opacity = 0.25;
+             }
+          }
+        });
+      });
+    }
+  }, [activeFloor, selectedZone, zoneStatuses]);
+
+  return (
+    <>
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+    </>
   );
 }
 
@@ -849,9 +1229,36 @@ export default function HabitatPage() {
                       {selectedZone} · {currentZones.find(z => z.id === selectedZone)?.label ?? FLOOR_ZONES[activeFloor][0].label}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-around', padding: '12px 0' }}>
-                      <SemiGauge value={zoneEnv.oxygen} min={60} max={100} unit="%" label="O₂ OXYGEN" safeMin={78} safeMax={95} color="#00e5ff" />
-                      <SemiGauge value={zoneEnv.radiation} min={0} max={50} unit="mSv" label="RADIATION" safeMin={0} safeMax={25} color="#00ff88" />
-                      <SemiGauge value={zoneEnv.pressure} min={85} max={115} unit="kPa" label="PRESSURE" safeMin={95} safeMax={110} color="#ffaa00" />
+                      <SemiGauge 
+                        value={zoneEnv.oxygen} 
+                        min={activeFloor === 'B4' ? 20 : 60} 
+                        max={100} 
+                        unit="%" 
+                        label="O₂ OXYGEN" 
+                        safeMin={activeFloor === 'B4' ? 35 : 78} 
+                        safeMax={activeFloor === 'B4' ? 50 : 95} 
+                        color="#00e5ff" 
+                      />
+                      <SemiGauge 
+                        value={zoneEnv.radiation} 
+                        min={0} 
+                        max={activeFloor === 'B4' ? 120 : 50} 
+                        unit="mSv" 
+                        label="RADIATION" 
+                        safeMin={0} 
+                        safeMax={activeFloor === 'B4' ? 100 : 25} 
+                        color="#00ff88" 
+                      />
+                      <SemiGauge 
+                        value={zoneEnv.pressure} 
+                        min={activeFloor === 'B4' ? 100 : 85} 
+                        max={activeFloor === 'B4' ? 200 : 115} 
+                        unit="kPa" 
+                        label="PRESSURE" 
+                        safeMin={activeFloor === 'B4' ? 130 : 95} 
+                        safeMax={activeFloor === 'B4' ? 170 : 110} 
+                        color="#ffaa00" 
+                      />
                     </div>
 
                     {/* 24H trend mini chart */}
@@ -884,46 +1291,26 @@ export default function HabitatPage() {
                   border: '1px solid rgba(0,229,255,0.15)', display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden',
                 }}>
-                  {/* Floor label */}
-                  <div style={{ fontSize: 'clamp(1rem,1.5vw,1.5rem)', fontFamily: 'monospace', color: '#00e5ff', letterSpacing: '0.3em', marginBottom: '16px' }}>
-                    {activeFloor} · {FLOOR_NAMES[activeFloor]}
-                  </div>
-
-                  {/* Placeholder box */}
-                  <div style={{
-                    width: '60%', height: '50%', border: '2px dashed rgba(0,229,255,0.3)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                  }}>
-                    <span style={{ fontFamily: 'monospace', color: 'rgba(0,229,255,0.3)', letterSpacing: '0.3em', fontSize: '12px' }}>
-                      [ 3D MODEL PLACEHOLDER · {activeFloor} ]
-                    </span>
-                    {['top-left', 'top-right', 'bottom-left', 'bottom-right'].map(corner => (
-                      <div key={corner} style={{
-                        position: 'absolute', width: '20px', height: '20px',
-                        borderTop: corner.includes('top') ? '2px solid #00e5ff' : 'none',
-                        borderBottom: corner.includes('bottom') ? '2px solid #00e5ff' : 'none',
-                        borderLeft: corner.includes('left') ? '2px solid #00e5ff' : 'none',
-                        borderRight: corner.includes('right') ? '2px solid #00e5ff' : 'none',
-                        top: corner.includes('top') ? -1 : 'auto',
-                        bottom: corner.includes('bottom') ? -1 : 'auto',
-                        left: corner.includes('left') ? -1 : 'auto',
-                        right: corner.includes('right') ? -1 : 'auto',
-                      }} />
-                    ))}
-                  </div>
-
-                  {selectedZone && (
-                    <div style={{ marginTop: '16px', fontFamily: 'monospace', color: 'rgba(0,229,255,0.5)', fontSize: '11px', letterSpacing: '0.2em' }}>
-                      VIEWING: {selectedZone}
-                    </div>
-                  )}
-
                   {/* Hex grid background */}
                   <div style={{
                     position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.05,
                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='104' viewBox='0 0 60 104' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 104l30-17.32V17.32L30 0 0 17.32v69.36L30 104z' fill='none' stroke='%2300e5ff' stroke-width='1'/%3E%3C/svg%3E")`,
                     backgroundSize: '30px 52px',
+                    zIndex: 0,
                   }} />
+
+                  <Habitat3DViewer activeFloor={activeFloor} selectedZone={selectedZone} zoneStatuses={zoneStatuses} />
+
+                  {/* Floor label */}
+                  <div style={{ position: 'absolute', top: '24px', left: '24px', fontSize: 'clamp(1rem,1.5vw,1.5rem)', fontFamily: 'monospace', color: '#00e5ff', letterSpacing: '0.3em', zIndex: 10, pointerEvents: 'none', textShadow: '0 0 10px rgba(0,229,255,0.5)' }}>
+                    {activeFloor} · {FLOOR_NAMES[activeFloor]}
+                  </div>
+
+                  {selectedZone && (
+                    <div style={{ position: 'absolute', bottom: '24px', left: '24px', fontFamily: 'monospace', color: 'rgba(0,229,255,0.5)', fontSize: '11px', letterSpacing: '0.2em', zIndex: 10, pointerEvents: 'none', textShadow: '0 0 10px rgba(0,229,255,0.3)' }}>
+                      VIEWING: {selectedZone}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1099,24 +1486,33 @@ export default function HabitatPage() {
   );
 }
 
+function getSafeRanges(zoneId: string) {
+  if (zoneId.startsWith('B4')) return { o2: [35, 50], rad: [0, 100], prs: [130, 170] };
+  return { o2: [78, 95], rad: [0, 25], prs: [95, 110] };
+}
+
 // ─── System Health Score ─────────────────────────────────────────
 
 function SystemHealthScore() {
-  const allZones = Object.values(ZONE_DATA);
+  const allZones = Object.entries(ZONE_DATA);
   let totalO2 = 0, totalRad = 0, totalPrs = 0;
   let warningCount = 0;
 
-  allZones.forEach(zone => {
-    const o2 = zone.oxygen >= 78 && zone.oxygen <= 95 ? 100 : Math.max(0, 100 - Math.abs(zone.oxygen - 85) * 3);
-    const rad = zone.radiation <= 25 ? 100 : Math.max(0, 100 - (zone.radiation - 25) * 4);
-    const prs = zone.pressure >= 95 && zone.pressure <= 110 ? 100 : Math.max(0, 100 - Math.abs(zone.pressure - 102) * 2);
-    totalO2 += o2; totalRad += rad; totalPrs += prs;
-    if (zone.oxygen < 78 || zone.oxygen > 95 || zone.radiation > 25 || zone.pressure < 95 || zone.pressure > 110) warningCount++;
+  allZones.forEach(([zoneId, zone]) => {
+    const { o2: oRange, rad: rRange, prs: pRange } = getSafeRanges(zoneId);
+
+    const o2Score = zone.oxygen >= oRange[0] && zone.oxygen <= oRange[1] ? 100 : Math.max(0, 100 - Math.abs(zone.oxygen - (oRange[0]+oRange[1])/2) * 3);
+    const radScore = zone.radiation <= rRange[1] ? 100 : Math.max(0, 100 - (zone.radiation - rRange[1]) * 4);
+    const prsScore = zone.pressure >= pRange[0] && zone.pressure <= pRange[1] ? 100 : Math.max(0, 100 - Math.abs(zone.pressure - (pRange[0]+pRange[1])/2) * 2);
+    
+    totalO2 += o2Score; totalRad += radScore; totalPrs += prsScore;
+    if (zone.oxygen < oRange[0] || zone.oxygen > oRange[1] || zone.radiation > rRange[1] || zone.pressure < pRange[0] || zone.pressure > pRange[1]) warningCount++;
   });
 
-  const o2Avg = totalO2 / allZones.length;
-  const radAvg = totalRad / allZones.length;
-  const prsAvg = totalPrs / allZones.length;
+  const allZonesLen = allZones.length;
+  const o2Avg = totalO2 / allZonesLen;
+  const radAvg = totalRad / allZonesLen;
+  const prsAvg = totalPrs / allZonesLen;
   const score = +((o2Avg + radAvg + prsAvg) / 3).toFixed(1);
   const scoreColor = score > 90 ? '#00ff88' : score > 75 ? '#ffaa00' : '#ff4444';
   const conditionLabel = score > 90 ? 'GOOD CONDITION' : score > 75 ? 'MODERATE RISK' : 'CRITICAL';
