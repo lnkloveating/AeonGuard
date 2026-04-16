@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAeonStore } from '../store/aeonStore';
 import {
   Terminal,
   Home,
@@ -32,7 +33,7 @@ import {
   Bar,
 } from 'recharts';
 
-type PodStatus = 'NOMINAL' | 'WARNING' | 'DORMANT' | 'CRITICAL';
+type PodStatus = 'NOMINAL' | 'WARNING' | 'DORMANT' | 'CRITICAL' | 'WAKING';
 
 interface Pod {
   id: string;
@@ -83,9 +84,12 @@ const statusStyles: Record<PodStatus, { bg: string; border: string; dot: string 
   WARNING: { bg: 'rgba(255,170,0,0.08)', border: 'rgba(255,170,0,0.4)', dot: 'bg-amber-400' },
   DORMANT: { bg: 'rgba(0,50,100,0.1)', border: 'rgba(0,100,200,0.2)', dot: 'bg-blue-400/50' },
   CRITICAL: { bg: 'rgba(255,0,0,0.1)', border: 'rgba(255,50,50,0.6)', dot: 'bg-red-500' },
+  WAKING: { bg: 'rgba(255,100,0,0.15)', border: 'rgba(255,100,0,0.7)', dot: 'bg-orange-500 animate-bounce' },
 };
 
 export default function PodsPage() {
+  const { podOverrides, pendingDecisions } = useAeonStore();
+  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
@@ -105,18 +109,21 @@ export default function PodsPage() {
       if (idNum >= 119 && idNum <= 123) status = 'WARNING';
       if (idNum >= 124 && idNum <= 125) status = 'DORMANT';
       if (idNum >= 126) status = 'CRITICAL';
+      const id = `POD-${String(idNum).padStart(3, '0')}`;
+      const over = localStorage.getItem(`podOverride_${id}`);
+      const effectiveStatus = over || podOverrides[id] || status;
       return {
-        id: `POD-${String(idNum).padStart(3, '0')}`,
+        id,
         name: randomName(i),
         role: randomRole(i),
-        status,
+        status: effectiveStatus as PodStatus,
         heartRate: 45 + ((i * 17 + 5) % 21),
         temperature: +(35.5 + ((i * 13 + 7) % 16) / 10).toFixed(1),
         metabolism: 15 + ((i * 11 + 3) % 11),
         pod: idNum,
       };
     });
-  }, []);
+  }, [podOverrides]);
 
   const counts = useMemo(
     () => ({
@@ -425,7 +432,7 @@ export default function PodsPage() {
                 <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" active collapsed={!sidebarOpen} />
                 <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" collapsed={!sidebarOpen} />
                 <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={2} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
@@ -494,17 +501,19 @@ export default function PodsPage() {
                     <button
                       key={pod.id}
                       onClick={() => setSelectedPod(pod)}
-                      className={`relative p-1.5 text-left transition-all cursor-pointer ${pod.status === 'CRITICAL' ? 'animate-pulse' : ''}`}
+                      className={`relative p-1.5 text-left transition-all cursor-pointer ${pod.status === 'CRITICAL' || pod.status === 'WAKING' ? 'animate-pulse' : ''}`}
                       style={{
                         backgroundColor: isSelected ? 'rgba(0,229,255,0.12)' : s.bg,
                         border: `1px solid ${isSelected ? 'rgba(0,229,255,0.6)' : s.border}`,
-                        boxShadow: pod.status === 'CRITICAL' ? '0 0 8px rgba(255,50,50,0.3)' : isSelected ? '0 0 8px rgba(0,229,255,0.2)' : 'none',
+                        boxShadow: pod.status === 'CRITICAL' ? '0 0 8px rgba(255,50,50,0.3)' : pod.status === 'WAKING' ? '0 0 10px rgba(255,100,0,0.5)' : isSelected ? '0 0 8px rgba(0,229,255,0.2)' : 'none',
                       }}
                     >
                       <div className="text-[clamp(0.45rem,0.55vw,0.6rem)] font-bold tracking-wider text-cyan-400/80 mb-1">{pod.id}</div>
                       <div className="flex items-center gap-1">
                         <div className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                        <span className="text-[clamp(0.375rem,0.45vw,0.5rem)] opacity-40 truncate">{pod.status}</span>
+                        <span className={`text-[clamp(0.375rem,0.45vw,0.5rem)] opacity-40 truncate ${pod.status === 'WAKING' ? 'text-orange-400 opacity-100 font-bold' : ''}`}>
+                          {pod.status === 'WAKING' ? 'WAKING UP' : pod.status}
+                        </span>
                       </div>
                     </button>
                   );
@@ -1395,6 +1404,7 @@ function PodDetail({ pod, vitalsHistory }: { pod: Pod; vitalsHistory: Array<{ ho
     WARNING: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
     DORMANT: 'text-blue-400 bg-blue-500/15 border-blue-500/30',
     CRITICAL: 'text-red-400 bg-red-500/15 border-red-500/30',
+    WAKING: 'text-orange-400 bg-orange-500/15 border-orange-500/30 font-bold animate-pulse',
   };
   const vitalBar = (value: number, max: number, color: string) => {
     const pct = Math.min(100, (value / max) * 100);

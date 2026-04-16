@@ -11,6 +11,7 @@ import HomePage from './pages/HomePage';
 import PodsPage from './pages/PodsPage';
 import HabitatPage from './pages/HabitatPage';
 import PlaceholderPage from './pages/PlaceholderPage';
+import AIEnginePage from './pages/AIEnginePage';
 
 const USERS = [
   { id: 'ADMIN_01', password: 'earth2500', role: 'ADMINISTRATOR', name: 'Administrator' },
@@ -1061,7 +1062,7 @@ export default function App() {
         <Route path="/dashboard" element={<HomePage />} />
         <Route path="/dashboard/pods" element={<PodsPage />} />
         <Route path="/dashboard/habitat" element={<HabitatPage />} />
-        <Route path="/dashboard/ai" element={<PlaceholderPage title="AI推理引擎 AI ENGINE" />} />
+        <Route path="/dashboard/ai" element={<AIEnginePage />} />
         <Route path="/dashboard/override" element={<PlaceholderPage title="人工决策 OVERRIDE" />} />
         <Route path="/dashboard/mission" element={<PlaceholderPage title="任务档案 MISSION LOG" />} />
         <Route path="/dashboard/crew" element={<PlaceholderPage title="机组名单 CREW ROSTER" />} />

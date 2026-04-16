@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAeonStore } from '../store/aeonStore';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -432,7 +433,7 @@ function EnvironmentHeatmap({ selectedZone, onSelectZone }: {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
             {ZONE_GRID.flat().map(zoneId => {
               const val = ZONE_DATA[zoneId][sensor.key];
-              
+
               let min = sensor.min; let max = sensor.max;
               let safeMin = sensor.safeMin; let safeMax = sensor.safeMax;
               if (zoneId.startsWith('B4')) {
@@ -491,13 +492,13 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
   const b4ObjectsRef = useRef<{ mesh: THREE.Object3D, isLight?: boolean, isRing?: boolean, ringIndex?: number }[]>([]);
   const timeRef = useRef(0);
   const activeFloorRef = useRef(activeFloor);
-  
+
   useEffect(() => { activeFloorRef.current = activeFloor; }, [activeFloor]);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    
+
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     scene.background = new THREE.Color(0x000810);
@@ -547,7 +548,7 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
     // B3 Energy Towers (Procedural Additions)
     const towerGeo = new THREE.CylinderGeometry(8, 8, 120, 8);
     const towerMat = new THREE.MeshStandardMaterial({ color: 0xff6600, metalness: 0.8, roughness: 0.2 });
-    const positions = [ [-100, 60, -80], [100, 60, -80], [-100, 60, 80], [100, 60, 80] ];
+    const positions = [[-100, 60, -80], [100, 60, -80], [-100, 60, 80], [100, 60, 80]];
     positions.forEach(pos => {
       const tower = new THREE.Mesh(towerGeo, towerMat);
       tower.position.set(pos[0], pos[1], pos[2]);
@@ -563,9 +564,9 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
     const loader = new GLTFLoader();
     const modelConfigs = [
       { file: '/models/r1.glb', position: [-150, 0, 0], name: 'r1', zone: 'B1-R1', label: '居民区 A' },
-      { file: '/models/r2.glb', position: [150, 0, 0],  name: 'r2', zone: 'B1-R2', label: '居民区 B' },
+      { file: '/models/r2.glb', position: [150, 0, 0], name: 'r2', zone: 'B1-R2', label: '居民区 B' },
       { file: '/models/i1.glb', position: [-150, 0, 0], name: 'i1', zone: 'B2-I1', label: '工业区 A' },
-      { file: '/models/i2.glb', position: [150, 0, 0],  name: 'i2', zone: 'B2-I2', label: '工业区 B' },
+      { file: '/models/i2.glb', position: [150, 0, 0], name: 'i2', zone: 'B2-I2', label: '工业区 B' },
     ];
 
     const modelsMap = new Map<string, THREE.Group>();
@@ -613,10 +614,10 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
     let rafId: number;
     const animate = () => {
       rafId = requestAnimationFrame(animate);
-      
+
       const t = timeRef.current;
       timeRef.current += 0.01;
-      
+
       const floor = activeFloorRef.current;
       if (floor === 'B3') {
         b3ObjectsRef.current.forEach((tower, i) => {
@@ -627,13 +628,13 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
         const objs = b4ObjectsRef.current;
         objs.forEach(obj => {
           if (obj.isRing) {
-             const idx = obj.ringIndex || 0;
-             if (idx % 3 === 0) obj.mesh.rotation.z += 0.005;
-             else if (idx % 3 === 1) obj.mesh.rotation.z -= 0.003;
-             else obj.mesh.rotation.x += 0.004;
+            const idx = obj.ringIndex || 0;
+            if (idx % 3 === 0) obj.mesh.rotation.z += 0.005;
+            else if (idx % 3 === 1) obj.mesh.rotation.z -= 0.003;
+            else obj.mesh.rotation.x += 0.004;
           }
           if (obj.isLight) {
-             (obj.mesh as THREE.PointLight).intensity = 1.0 + Math.sin(t * 2 + (obj.ringIndex || 0) * 0.7) * 0.5;
+            (obj.mesh as THREE.PointLight).intensity = 1.0 + Math.sin(t * 2 + (obj.ringIndex || 0) * 0.7) * 0.5;
           }
         });
       }
@@ -685,9 +686,9 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
         scene.remove(mesh);
         if ((mesh as any).geometry) (mesh as any).geometry.dispose();
         if ((mesh as any).material) {
-           const mat = (mesh as any).material;
-           if (Array.isArray(mat)) mat.forEach(m => m.dispose());
-           else mat.dispose();
+          const mat = (mesh as any).material;
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat.dispose();
         }
       });
       b4ObjectsRef.current = [];
@@ -705,84 +706,84 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
     }
 
     if (activeFloor === 'B4' && b4ObjectsRef.current.length === 0) {
-       function createCylinder(start: number[], end: number[], radius: number, mat: THREE.Material) {
-         const dir = new THREE.Vector3(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
-         const len = dir.length();
-         const geo = new THREE.CylinderGeometry(radius, radius, len, 8);
-         const mesh = new THREE.Mesh(geo, mat);
-         mesh.position.set((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2);
-         mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-         return mesh;
-       }
+      function createCylinder(start: number[], end: number[], radius: number, mat: THREE.Material) {
+        const dir = new THREE.Vector3(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+        const len = dir.length();
+        const geo = new THREE.CylinderGeometry(radius, radius, len, 8);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+        return mesh;
+      }
 
-       const reactorPositions = [
-         [-240, 80, -180], [0, 90, -180], [240, 80, -180],
-         [-240, 85, 0],    [0, 100, 0],   [240, 85, 0],
-         [-240, 80, 180],  [0, 90, 180],  [240, 80, 180],
-       ];
+      const reactorPositions = [
+        [-240, 80, -180], [0, 90, -180], [240, 80, -180],
+        [-240, 85, 0], [0, 100, 0], [240, 85, 0],
+        [-240, 80, 180], [0, 90, 180], [240, 80, 180],
+      ];
 
-       reactorPositions.forEach(([x, y, z], i) => {
-         let innerRadius = 18;
-         let outerGlow = 26;
-         if (i === 4) {
-           innerRadius = 24;
-           outerGlow = 34; // Center reactor
-         } else if (i === 0 || i === 2 || i === 6 || i === 8) {
-           innerRadius = 15;
-           outerGlow = 22; // Corner reactors
-         }
+      reactorPositions.forEach(([x, y, z], i) => {
+        let innerRadius = 18;
+        let outerGlow = 26;
+        if (i === 4) {
+          innerRadius = 24;
+          outerGlow = 34; // Center reactor
+        } else if (i === 0 || i === 2 || i === 6 || i === 8) {
+          innerRadius = 15;
+          outerGlow = 22; // Corner reactors
+        }
 
-         const glowGeo = new THREE.SphereGeometry(outerGlow, 32, 32);
-         const glowMat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff4400, emissiveIntensity: 1.5, transparent: true, opacity: 0.15 });
-         const glow = new THREE.Mesh(glowGeo, glowMat);
-         glow.position.set(x, y, z);
-         scene.add(glow);
-         b4ObjectsRef.current.push({ mesh: glow });
+        const glowGeo = new THREE.SphereGeometry(outerGlow, 32, 32);
+        const glowMat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff4400, emissiveIntensity: 1.5, transparent: true, opacity: 0.15 });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        glow.position.set(x, y, z);
+        scene.add(glow);
+        b4ObjectsRef.current.push({ mesh: glow });
 
-         const coreGeo = new THREE.SphereGeometry(innerRadius, 32, 32);
-         const coreMat = new THREE.MeshStandardMaterial({ color: 0xff5500, emissive: 0xff3300, emissiveIntensity: 2.0, metalness: 0.2, roughness: 0.8 });
-         const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-         coreMesh.position.set(x, y, z);
-         scene.add(coreMesh);
-         b4ObjectsRef.current.push({ mesh: coreMesh });
+        const coreGeo = new THREE.SphereGeometry(innerRadius, 32, 32);
+        const coreMat = new THREE.MeshStandardMaterial({ color: 0xff5500, emissive: 0xff3300, emissiveIntensity: 2.0, metalness: 0.2, roughness: 0.8 });
+        const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        coreMesh.position.set(x, y, z);
+        scene.add(coreMesh);
+        b4ObjectsRef.current.push({ mesh: coreMesh });
 
-         const ringGeo = new THREE.TorusGeometry(outerGlow + 4, 1.5, 8, 48);
-         const ringMat = new THREE.MeshBasicMaterial({ color: i === 4 ? 0xff4400 : i % 2 === 0 ? 0xff8800 : 0xffaa00, transparent: true, opacity: 0.7 });
-         const ring = new THREE.Mesh(ringGeo, ringMat);
-         ring.position.set(x, y, z);
-         ring.rotation.x = Math.PI / 3 + i * 0.3;
-         scene.add(ring);
-         b4ObjectsRef.current.push({ mesh: ring, isRing: true, ringIndex: i });
+        const ringGeo = new THREE.TorusGeometry(outerGlow + 4, 1.5, 8, 48);
+        const ringMat = new THREE.MeshBasicMaterial({ color: i === 4 ? 0xff4400 : i % 2 === 0 ? 0xff8800 : 0xffaa00, transparent: true, opacity: 0.7 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.set(x, y, z);
+        ring.rotation.x = Math.PI / 3 + i * 0.3;
+        scene.add(ring);
+        b4ObjectsRef.current.push({ mesh: ring, isRing: true, ringIndex: i });
 
-         const light = new THREE.PointLight(0xff4400, 1.2, 200);
-         light.position.set(x, y, z);
-         scene.add(light);
-         b4ObjectsRef.current.push({ mesh: light, isLight: true, ringIndex: i });
-       });
+        const light = new THREE.PointLight(0xff4400, 1.2, 200);
+        light.position.set(x, y, z);
+        scene.add(light);
+        b4ObjectsRef.current.push({ mesh: light, isLight: true, ringIndex: i });
+      });
 
-       const connections = [
-         [0,1],[1,2],  // top row
-         [3,4],[4,5],  // middle row
-         [6,7],[7,8],  // bottom row
-         [0,3],[3,6],  // left column
-         [1,4],[4,7],  // center column
-         [2,5],[5,8],  // right column
-       ];
-       const pipeMat = new THREE.MeshStandardMaterial({ color: 0x331100, metalness: 0.9, roughness: 0.2 });
-       connections.forEach(([from, to]) => {
-         const p1 = reactorPositions[from];
-         const p2 = reactorPositions[to];
-         const pipe = createCylinder(p1, p2, 4, pipeMat);
-         scene.add(pipe);
-         b4ObjectsRef.current.push({ mesh: pipe });
-       });
+      const connections = [
+        [0, 1], [1, 2],  // top row
+        [3, 4], [4, 5],  // middle row
+        [6, 7], [7, 8],  // bottom row
+        [0, 3], [3, 6],  // left column
+        [1, 4], [4, 7],  // center column
+        [2, 5], [5, 8],  // right column
+      ];
+      const pipeMat = new THREE.MeshStandardMaterial({ color: 0x331100, metalness: 0.9, roughness: 0.2 });
+      connections.forEach(([from, to]) => {
+        const p1 = reactorPositions[from];
+        const p2 = reactorPositions[to];
+        const pipe = createCylinder(p1, p2, 4, pipeMat);
+        scene.add(pipe);
+        b4ObjectsRef.current.push({ mesh: pipe });
+      });
     }
 
     // Toggle B3 towers
     b3ObjectsRef.current.forEach(t => t.visible = (activeFloor === 'B3'));
 
     const modelsMap = (containerRef.current as any)._modelsMap as Map<string, THREE.Group>;
-    
+
     if (modelsMap) {
       modelsMap.forEach((model, zoneId) => {
         // Handle visibility based on activeFloor
@@ -799,11 +800,11 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
         }
 
         const isSelected = zoneId === selectedZone;
-        
+
         model.traverse(child => {
           if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
             const isRes = zoneId.includes('R1') || zoneId.includes('R2');
-            
+
             if (activeFloor === 'B3') {
               child.material.color.setHex(0x2a1500);
               child.material.emissive.setHex(0x552200);
@@ -826,17 +827,17 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
           }
 
           if (child instanceof THREE.LineSegments && child.material instanceof THREE.LineBasicMaterial) {
-             const isRes = zoneId.includes('R1') || zoneId.includes('R2');
-             if (activeFloor === 'B3') {
-               child.material.color.setHex(0xffaa00);
-               child.material.opacity = 0.25;
-             } else if (activeFloor === 'B4' && zoneId === 'B2-I1') {
-               child.material.color.setHex(0xff4400);
-               child.material.opacity = 0.3;
-             } else {
-               child.material.color.setHex(isRes ? 0x00e5ff : 0xffaa00);
-               child.material.opacity = 0.25;
-             }
+            const isRes = zoneId.includes('R1') || zoneId.includes('R2');
+            if (activeFloor === 'B3') {
+              child.material.color.setHex(0xffaa00);
+              child.material.opacity = 0.25;
+            } else if (activeFloor === 'B4' && zoneId === 'B2-I1') {
+              child.material.color.setHex(0xff4400);
+              child.material.opacity = 0.3;
+            } else {
+              child.material.color.setHex(isRes ? 0x00e5ff : 0xffaa00);
+              child.material.opacity = 0.25;
+            }
           }
         });
       });
@@ -877,15 +878,28 @@ export default function HabitatPage() {
     { time: '6HR AGO', icon: '🟢', text: '能源层温度稳定', color: 'text-cyan-400/70' },
     { time: '1DAY AGO', icon: '🔴', text: 'B3-E1 辐射峰值事件 已修复', color: 'text-red-400/70' },
   ]);
-  const [crisisActive, setCrisisActive] = useState(false);
+  const { triggerCrisis, resolveCrisis, activeCrisis, pendingDecisions } = useAeonStore();
+  const crisisActive = activeCrisis !== null;
+  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
   const [crisisBanner, setCrisisBanner] = useState(false);
   const [crisisAcknowledged, setCrisisAcknowledged] = useState(false);
+  const [currentCrisisType, setCurrentCrisisType] = useState<any>(null);
   const [countdown, setCountdown] = useState(5400);
   const [selectedPrediction, setSelectedPrediction] = useState<string | null>(null);
   const [selectedVent, setSelectedVent] = useState<string | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const [dispatchedRoutes, setDispatchedRoutes] = useState<string[]>([]);
-  const [alertMuted, setAlertMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [ventData, setVentData] = useState([
+    { id: 'VENT-A1', zone: 'B1-R1 居民区A', flow: 450, target: 480, status: 'NORMAL' },
+    { id: 'VENT-A2', zone: 'B1-R2 居民区B', flow: 285, target: 480, status: 'LOW' },
+    { id: 'VENT-B1', zone: 'B2-I1 工业区A', flow: 520, target: 500, status: 'NORMAL' },
+    { id: 'VENT-B2', zone: 'B2-I2 工业区B', flow: 495, target: 500, status: 'NORMAL' },
+    { id: 'VENT-C1', zone: 'B3-E1 能源区A', flow: 380, target: 420, status: 'NORMAL' },
+    { id: 'VENT-C2', zone: 'B3-E2 能源区B', flow: 410, target: 420, status: 'NORMAL' },
+    { id: 'VENT-D1', zone: 'B4-C1 核心区A', flow: 320, target: 350, status: 'NORMAL' },
+    { id: 'VENT-D2', zone: 'B4-C2 核心区B', flow: 298, target: 350, status: 'LOW' },
+  ]);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const alertIntervalRef = useRef<number>(0);
@@ -926,23 +940,47 @@ export default function HabitatPage() {
     }
   };
 
+  const toggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      initAudio();
+      playAlertBeep();
+      alertIntervalRef.current = window.setInterval(playAlertBeep, 3000);
+    } else {
+      setIsMuted(true);
+      stopAlert();
+    }
+  };
+
+  const handleAcknowledge = () => {
+    const loc = currentCrisisType?.location ?? activeCrisis?.location;
+    stopAlert();
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
+    resolveCrisis();
+    setCrisisBanner(false);
+    setCrisisAcknowledged(false);
+    setIsMuted(false);
+    setDispatchedRoutes([]);
+    setSelectedRoute(null);
+    setCountdown(5400);
+    setCurrentCrisisType(null);
+    if (loc) {
+      setZoneStatuses(prev => ({ ...prev, [loc]: 'WARNING' }));
+    }
+    localStorage.removeItem('activeCrisisType');
+    localStorage.removeItem('activeCrisisLocation');
+    localStorage.removeItem('activeCrisisLabel');
+  };
+
   useEffect(() => {
     return () => {
       stopAlert();
       if (audioCtxRef.current) audioCtxRef.current.close();
     };
   }, []);
-
-  const [ventData, setVentData] = useState([
-    { id: 'VENT-A1', zone: 'B1-R1 居民区A', flow: 450, target: 480, status: 'NORMAL' },
-    { id: 'VENT-A2', zone: 'B1-R2 居民区B', flow: 285, target: 480, status: 'LOW' },
-    { id: 'VENT-B1', zone: 'B2-I1 工业区A', flow: 520, target: 500, status: 'NORMAL' },
-    { id: 'VENT-B2', zone: 'B2-I2 工业区B', flow: 495, target: 500, status: 'NORMAL' },
-    { id: 'VENT-C1', zone: 'B3-E1 能源区A', flow: 380, target: 420, status: 'NORMAL' },
-    { id: 'VENT-C2', zone: 'B3-E2 能源区B', flow: 410, target: 420, status: 'NORMAL' },
-    { id: 'VENT-D1', zone: 'B4-C1 核心区A', flow: 320, target: 350, status: 'NORMAL' },
-    { id: 'VENT-D2', zone: 'B4-C2 核心区B', flow: 298, target: 350, status: 'LOW' },
-  ]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -990,30 +1028,39 @@ export default function HabitatPage() {
     return () => clearInterval(iv);
   }, []);
 
-  const triggerCrisis = () => {
+  const crisisTypes = [
+    { id: 'oxygen', label: 'O₂ CRITICAL', location: 'B1-R2', desc: '氧气浓度骤降至71.3%' },
+    { id: 'radiation', label: 'RADIATION SURGE', location: 'B3-E1', desc: '辐射读数超出安全阈值' },
+    { id: 'power', label: 'POWER FAILURE', location: 'B3-E2', desc: '能源系统输出中断' },
+    { id: 'pressure', label: 'PRESSURE ANOMALY', location: 'B2-I1', desc: '气压异常下降' },
+  ];
+
+  const triggerCrisisEvent = () => {
     if (crisisActive) {
-      setCrisisActive(false);
-      setCrisisBanner(false);
-      setCrisisAcknowledged(false);
-      setAlertMuted(false);
-      setSelectedRoute(null);
-      setDispatchedRoutes([]);
-      stopAlert();
-      setZoneStatuses(prev => ({ ...prev, 'B1-R2': 'WARNING' }));
+      handleAcknowledge();
       return;
     }
+
+    const randomCrisis = crisisTypes[Math.floor(Math.random() * crisisTypes.length)];
+    setCurrentCrisisType(randomCrisis);
+
     initAudio();
-    setCrisisActive(true);
+    triggerCrisis(randomCrisis.id, randomCrisis.location);
     setCrisisBanner(true);
-    setAlertMuted(false);
-    setZoneStatuses(prev => ({ ...prev, 'B1-R2': 'CRITICAL' }));
+    setIsMuted(false);
+
+    setZoneStatuses(prev => ({ ...prev, [randomCrisis.location]: 'CRITICAL' }));
     setAlerts(prev => [
-      { time: 'NOW', icon: '🔴', text: 'CRISIS: B1-R2 O₂ 急剧下降 · AI ENGINE ACTIVATING', color: 'text-red-400' },
+      { time: 'NOW', icon: '🔴', text: `CRISIS: ${randomCrisis.location} ${randomCrisis.desc} · AI ENGINE ACTIVATING`, color: 'text-red-400' },
       ...prev,
     ]);
     playAlertBeep();
     alertIntervalRef.current = window.setInterval(playAlertBeep, 3000);
     setTimeout(() => setCrisisBanner(false), 5000);
+
+    localStorage.setItem('activeCrisisType', randomCrisis.id);
+    localStorage.setItem('activeCrisisLocation', randomCrisis.location);
+    localStorage.setItem('activeCrisisLabel', randomCrisis.label);
   };
 
   const langLabels: Record<string, string> = { zh: '中文', en: 'ENG', mixed: '混合' };
@@ -1079,7 +1126,7 @@ export default function HabitatPage() {
                 <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" collapsed={!sidebarOpen} />
                 <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" active collapsed={!sidebarOpen} />
                 <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={2} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
@@ -1098,13 +1145,15 @@ export default function HabitatPage() {
 
         {/* ─── Crisis overlays ─── */}
         {crisisActive && (
-          <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 998,
+          <div style={{
+            position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 998,
             border: '3px solid rgba(255,50,50,0.8)', animation: 'borderPulse 1s ease-in-out infinite',
             boxShadow: 'inset 0 0 60px rgba(255,0,0,0.2)',
           }} />
         )}
         {crisisActive && (
-          <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999,
+          <div style={{
+            position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999,
             animation: 'redAlert 1.5s ease-in-out infinite',
           }} />
         )}
@@ -1117,7 +1166,7 @@ export default function HabitatPage() {
             fontFamily: 'monospace',
           }}>
             <span style={{ color: '#fff', fontSize: 'clamp(0.7rem,0.9vw,1rem)', letterSpacing: '0.3em', fontWeight: 'bold' }}>
-              🚨 CRISIS ALERT · B1-R2 O₂ CRITICAL · 危机警报 · 立即响应
+              🚨 CRISIS ALERT · {currentCrisisType?.location} {currentCrisisType?.label} · 危机警报 · 立即响应
             </span>
             <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', letterSpacing: '0.2em' }}>
               AEONGUARD AI ENGINE ACTIVATED · 永卫系统已介入
@@ -1125,14 +1174,14 @@ export default function HabitatPage() {
           </div>
         )}
         {crisisActive && (
-          <button onClick={() => { stopAlert(); setAlertMuted(true); }} style={{
+          <button type="button" onClick={toggleMute} style={{
             position: 'fixed', top: '96px', right: '16px', zIndex: 1001,
-            background: alertMuted ? 'rgba(60,60,60,0.9)' : 'rgba(180,0,0,0.8)',
-            border: `1px solid ${alertMuted ? '#666' : '#ff4444'}`,
+            background: isMuted ? 'rgba(60,60,60,0.9)' : 'rgba(180,0,0,0.8)',
+            border: `1px solid ${isMuted ? '#666' : '#ff4444'}`,
             color: 'white', fontFamily: 'monospace', fontSize: '11px',
             padding: '6px 12px', cursor: 'pointer', letterSpacing: '0.2em',
           }}>
-            {alertMuted ? '🔇 MUTED' : '🔇 MUTE ALARM'}
+            {isMuted ? '🔊 UNMUTE ALARM' : '🔇 MUTE ALARM'}
           </button>
         )}
 
@@ -1229,35 +1278,35 @@ export default function HabitatPage() {
                       {selectedZone} · {currentZones.find(z => z.id === selectedZone)?.label ?? FLOOR_ZONES[activeFloor][0].label}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-around', padding: '12px 0' }}>
-                      <SemiGauge 
-                        value={zoneEnv.oxygen} 
-                        min={activeFloor === 'B4' ? 20 : 60} 
-                        max={100} 
-                        unit="%" 
-                        label="O₂ OXYGEN" 
-                        safeMin={activeFloor === 'B4' ? 35 : 78} 
-                        safeMax={activeFloor === 'B4' ? 50 : 95} 
-                        color="#00e5ff" 
+                      <SemiGauge
+                        value={zoneEnv.oxygen}
+                        min={activeFloor === 'B4' ? 20 : 60}
+                        max={100}
+                        unit="%"
+                        label="O₂ OXYGEN"
+                        safeMin={activeFloor === 'B4' ? 35 : 78}
+                        safeMax={activeFloor === 'B4' ? 50 : 95}
+                        color="#00e5ff"
                       />
-                      <SemiGauge 
-                        value={zoneEnv.radiation} 
-                        min={0} 
-                        max={activeFloor === 'B4' ? 120 : 50} 
-                        unit="mSv" 
-                        label="RADIATION" 
-                        safeMin={0} 
-                        safeMax={activeFloor === 'B4' ? 100 : 25} 
-                        color="#00ff88" 
+                      <SemiGauge
+                        value={zoneEnv.radiation}
+                        min={0}
+                        max={activeFloor === 'B4' ? 120 : 50}
+                        unit="mSv"
+                        label="RADIATION"
+                        safeMin={0}
+                        safeMax={activeFloor === 'B4' ? 100 : 25}
+                        color="#00ff88"
                       />
-                      <SemiGauge 
-                        value={zoneEnv.pressure} 
-                        min={activeFloor === 'B4' ? 100 : 85} 
-                        max={activeFloor === 'B4' ? 200 : 115} 
-                        unit="kPa" 
-                        label="PRESSURE" 
-                        safeMin={activeFloor === 'B4' ? 130 : 95} 
-                        safeMax={activeFloor === 'B4' ? 170 : 110} 
-                        color="#ffaa00" 
+                      <SemiGauge
+                        value={zoneEnv.pressure}
+                        min={activeFloor === 'B4' ? 100 : 85}
+                        max={activeFloor === 'B4' ? 200 : 115}
+                        unit="kPa"
+                        label="PRESSURE"
+                        safeMin={activeFloor === 'B4' ? 130 : 95}
+                        safeMax={activeFloor === 'B4' ? 170 : 110}
+                        color="#ffaa00"
                       />
                     </div>
 
@@ -1321,22 +1370,48 @@ export default function HabitatPage() {
 
             {/* Emergency Evacuation Protocol — visible only during crisis */}
             {crisisActive && (
-              <EmergencyEvacuation
-                countdown={countdown}
-                acknowledged={crisisAcknowledged}
-                onAcknowledge={() => setCrisisAcknowledged(true)}
-                onReset={triggerCrisis}
-                selectedRoute={selectedRoute}
-                onToggleRoute={from => setSelectedRoute(prev => prev === from ? null : from)}
-                dispatchedRoutes={dispatchedRoutes}
-                onDispatchRoute={(from, label, priority) => {
-                  setDispatchedRoutes(prev => (prev.includes(from) ? prev : [...prev, from]));
-                  setAlerts(prev => [
-                    { time: 'NOW', icon: '🟢', text: `P${priority} evacuation team dispatched to ${label}`, color: 'text-green-400' },
-                    ...prev,
-                  ]);
-                }}
-              />
+              <>
+                <EmergencyEvacuation
+                  countdown={countdown}
+                  acknowledged={crisisAcknowledged}
+                  onAcknowledge={handleAcknowledge}
+                  onReset={handleAcknowledge}
+                  selectedRoute={selectedRoute}
+                  onToggleRoute={from => setSelectedRoute(prev => prev === from ? null : from)}
+                  dispatchedRoutes={dispatchedRoutes}
+                  onDispatchRoute={(from, label, priority) => {
+                    setDispatchedRoutes(prev => (prev.includes(from) ? prev : [...prev, from]));
+                    setAlerts(prev => [
+                      { time: 'NOW', icon: '🟢', text: `P${priority} evacuation team dispatched to ${label}`, color: 'text-green-400' },
+                      ...prev,
+                    ]);
+                  }}
+                />
+                <div style={{
+                  margin: '16px 0',
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}>
+                  <button
+                    onClick={() => navigate('/dashboard/ai')}
+                    style={{
+                      padding: '14px 40px',
+                      background: 'rgba(0,229,255,0.1)',
+                      border: '2px solid #00e5ff',
+                      color: '#00e5ff',
+                      fontFamily: 'monospace',
+                      fontSize: 'clamp(0.8rem,1vw,1rem)',
+                      letterSpacing: '0.3em',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      boxShadow: '0 0 20px rgba(0,229,255,0.3)',
+                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }}
+                  >
+                    ◈ VIEW AI ANALYSIS · 查看AI推理分析 →
+                  </button>
+                </div>
+              </>
             )}
 
             {/* Alert Log + Crisis Trigger */}
@@ -1355,7 +1430,7 @@ export default function HabitatPage() {
               </div>
               <div className="w-[40%] border border-cyan-500/10 bg-[rgba(0,0,0,0.2)] p-6 flex flex-col items-center justify-center">
                 <div className="text-[clamp(0.7rem,0.85vw,0.9rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-6">── CRISIS CONTROL ──</div>
-                <button onClick={triggerCrisis} style={{
+                <button onClick={triggerCrisisEvent} style={{
                   padding: '18px 36px', fontSize: '14px', fontFamily: 'monospace', fontWeight: 'bold',
                   letterSpacing: '0.3em', cursor: 'pointer', transition: 'all 0.3s',
                   border: crisisActive ? '2px solid rgba(255,170,0,0.6)' : '2px solid rgba(255,0,0,0.6)',
@@ -1368,7 +1443,7 @@ export default function HabitatPage() {
                   {crisisActive ? '⚠ CRISIS ACTIVE · RESET' : '⚠ TRIGGER CRISIS EVENT'}
                 </button>
                 <div className="mt-4 text-[clamp(0.5rem,0.6vw,0.65rem)] tracking-widest text-cyan-500/30 text-center">
-                  {crisisActive ? 'AI ENGINE IS RESPONDING · CLICK TO RESET' : 'SETS B1-R2 TO CRITICAL · ADDS ALERT'}
+                  {crisisActive ? 'AI ENGINE IS RESPONDING · CLICK TO RESET' : 'RANDOM TRIGGER · ADDS ALERT'}
                 </div>
               </div>
             </div>
@@ -1410,7 +1485,7 @@ export default function HabitatPage() {
                       </tr>
                     );
                   })}
-                  </tbody>
+                </tbody>
               </table>
             </div>
 
@@ -1455,7 +1530,8 @@ export default function HabitatPage() {
         </main>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes warningPulse {
@@ -1501,10 +1577,10 @@ function SystemHealthScore() {
   allZones.forEach(([zoneId, zone]) => {
     const { o2: oRange, rad: rRange, prs: pRange } = getSafeRanges(zoneId);
 
-    const o2Score = zone.oxygen >= oRange[0] && zone.oxygen <= oRange[1] ? 100 : Math.max(0, 100 - Math.abs(zone.oxygen - (oRange[0]+oRange[1])/2) * 3);
+    const o2Score = zone.oxygen >= oRange[0] && zone.oxygen <= oRange[1] ? 100 : Math.max(0, 100 - Math.abs(zone.oxygen - (oRange[0] + oRange[1]) / 2) * 3);
     const radScore = zone.radiation <= rRange[1] ? 100 : Math.max(0, 100 - (zone.radiation - rRange[1]) * 4);
-    const prsScore = zone.pressure >= pRange[0] && zone.pressure <= pRange[1] ? 100 : Math.max(0, 100 - Math.abs(zone.pressure - (pRange[0]+pRange[1])/2) * 2);
-    
+    const prsScore = zone.pressure >= pRange[0] && zone.pressure <= pRange[1] ? 100 : Math.max(0, 100 - Math.abs(zone.pressure - (pRange[0] + pRange[1]) / 2) * 2);
+
     totalO2 += o2Score; totalRad += radScore; totalPrs += prsScore;
     if (zone.oxygen < oRange[0] || zone.oxygen > oRange[1] || zone.radiation > rRange[1] || zone.pressure < pRange[0] || zone.pressure > pRange[1]) warningCount++;
   });
@@ -1949,11 +2025,11 @@ const EVACUATION_ROUTES: {
   from: string; label: string; priority: number; route: string; time: string; capacity: number;
   mapPath: string; dimStroke: string;
 }[] = [
-  { from: 'B1-R2', label: '居民区 B', priority: 1, route: 'B1-R2 → 主通道A → 紧急出口E2', time: '4 MIN', capacity: 2400, mapPath: 'M 445 60 L 560 35', dimStroke: 'rgba(0,255,136,0.45)' },
-  { from: 'B1-R1', label: '居民区 A', priority: 2, route: 'B1-R1 → 主通道B → 紧急出口E1', time: '6 MIN', capacity: 2400, mapPath: 'M 155 60 L 40 35', dimStroke: 'rgba(0,229,255,0.45)' },
-  { from: 'B2-I1', label: '工业区 A', priority: 3, route: 'B2-I1 → 工业通道 → 紧急出口E3', time: '8 MIN', capacity: 1200, mapPath: 'M 140 188 L 38 182', dimStroke: 'rgba(0,229,255,0.35)' },
-  { from: 'B2-I2', label: '工业区 B', priority: 4, route: 'B2-I2 → 工业通道 → 紧急出口E4', time: '8 MIN', capacity: 1200, mapPath: 'M 460 188 L 562 182', dimStroke: 'rgba(0,229,255,0.35)' },
-];
+    { from: 'B1-R2', label: '居民区 B', priority: 1, route: 'B1-R2 → 主通道A → 紧急出口E2', time: '4 MIN', capacity: 2400, mapPath: 'M 445 60 L 560 35', dimStroke: 'rgba(0,255,136,0.45)' },
+    { from: 'B1-R1', label: '居民区 A', priority: 2, route: 'B1-R1 → 主通道B → 紧急出口E1', time: '6 MIN', capacity: 2400, mapPath: 'M 155 60 L 40 35', dimStroke: 'rgba(0,229,255,0.45)' },
+    { from: 'B2-I1', label: '工业区 A', priority: 3, route: 'B2-I1 → 工业通道 → 紧急出口E3', time: '8 MIN', capacity: 1200, mapPath: 'M 140 188 L 38 182', dimStroke: 'rgba(0,229,255,0.35)' },
+    { from: 'B2-I2', label: '工业区 B', priority: 4, route: 'B2-I2 → 工业通道 → 紧急出口E4', time: '8 MIN', capacity: 1200, mapPath: 'M 460 188 L 562 182', dimStroke: 'rgba(0,229,255,0.35)' },
+  ];
 
 function EmergencyEvacuation({ countdown, acknowledged, onAcknowledge, onReset, selectedRoute, onToggleRoute, dispatchedRoutes, onDispatchRoute }: {
   countdown: number; acknowledged: boolean; onAcknowledge: () => void; onReset: () => void;

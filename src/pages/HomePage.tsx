@@ -20,8 +20,11 @@ import {
 import { motion } from 'motion/react';
 import EarthScene from '../components/EarthScene';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAeonStore } from '../store/aeonStore';
 
 export default function HomePage() {
+  const { pendingDecisions } = useAeonStore();
+  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
   const navigate = useNavigate();
 
   const heroFullText = '流浪地球计划 · WANDERING EARTH PROJECT';
@@ -428,7 +431,7 @@ export default function HomePage() {
                 <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" collapsed={!sidebarOpen} />
                 <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" collapsed={!sidebarOpen} />
                 <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={2} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
@@ -716,7 +719,7 @@ export default function HomePage() {
                 <div className="flex-1 p-[1.5vw] space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">人工决策 / OVERRIDE</h4>
-                    <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 animate-pulse">2 PENDING</span>
+                    <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 animate-pulse">{pendingCount} PENDING</span>
                   </div>
                   <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">待审批决策队列与风险评估</p>
                   <div className="flex items-center gap-3 h-12 pt-2">
@@ -724,7 +727,7 @@ export default function HomePage() {
                       <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
                       <div className="absolute inset-0 w-3 h-3 rounded-full bg-red-500/50 animate-ping" />
                     </div>
-                    <span className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] font-bold tracking-[0.2em] text-red-400/80">2 DECISIONS PENDING REVIEW</span>
+                    <span className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] font-bold tracking-[0.2em] text-red-400/80">{pendingCount} DECISIONS PENDING REVIEW</span>
                   </div>
                 </div>
                 <div className="border-t border-cyan-500/10 px-[1.5vw] py-3 flex items-center justify-between text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-[0.2em] text-cyan-500/60 group-hover:text-cyan-400 transition-colors">
