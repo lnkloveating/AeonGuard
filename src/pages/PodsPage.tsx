@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAeonStore } from '../store/aeonStore';
+import { useOverrideBadge } from '../hooks/useOverrideBadge';
 import {
   Terminal,
   Home,
@@ -16,7 +17,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Languages,
+  Loader2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -33,7 +34,7 @@ import {
   Bar,
 } from 'recharts';
 
-type PodStatus = 'NOMINAL' | 'WARNING' | 'DORMANT' | 'CRITICAL' | 'WAKING';
+type PodStatus = 'NOMINAL' | 'WARNING' | 'DORMANT' | 'CRITICAL' | 'WAKING' | 'AWAKE';
 
 interface Pod {
   id: string;
@@ -48,7 +49,18 @@ interface Pod {
 
 const firstNames = ['CHEN', 'ZHANG', 'WANG', 'LI', 'YANOV', 'SMITH', 'GARCIA', 'KIM', 'PATEL', 'MÜLLER', 'TANAKA', 'IVANOV', 'BROWN', 'DAVIS', 'WILSON'];
 const lastNames = ['WEI', 'FANG', 'LEI', 'JUN', 'K', 'J', 'M', 'S', 'R', 'H', 'Y', 'A', 'T', 'C', 'P'];
-const roles = ['结构工程师', '核工程师', '医疗官', '生命支持', '导航官', '系统工程师', '地质学家', '气象学家', '生物学家', '物理学家'];
+const roles = [
+  'Structural Engineer',
+  'Nuclear Engineer',
+  'Medical Officer',
+  'Life Support',
+  'Navigation',
+  'Systems Engineer',
+  'Geologist',
+  'Meteorologist',
+  'Biologist',
+  'Physicist',
+];
 
 function randomName(i: number) {
   return `${firstNames[i % firstNames.length]}_${lastNames[(i * 7 + 3) % lastNames.length]}`;
@@ -58,25 +70,25 @@ function randomRole(i: number) {
 }
 
 const crewData = [
-  { name: '结构工程师', value: 18, color: '#00e5ff' },
-  { name: '核工程师', value: 15, color: '#ffaa00' },
-  { name: '医疗官', value: 12, color: '#00ff88' },
-  { name: '生命支持', value: 14, color: '#ff6644' },
-  { name: '导航官', value: 10, color: '#aa88ff' },
-  { name: '系统工程师', value: 16, color: '#ff88aa' },
-  { name: '其他专业', value: 42, color: '#445566' },
+  { name: 'Structural Eng.', value: 18, color: '#00e5ff' },
+  { name: 'Nuclear Eng.', value: 15, color: '#ffaa00' },
+  { name: 'Medical', value: 12, color: '#00ff88' },
+  { name: 'Life Support', value: 14, color: '#ff6644' },
+  { name: 'Navigation', value: 10, color: '#aa88ff' },
+  { name: 'Systems Eng.', value: 16, color: '#ff88aa' },
+  { name: 'Other', value: 42, color: '#445566' },
 ];
 const crewTotal = crewData.reduce((a, b) => a + b.value, 0);
 
 const scheduleData = [
-  { name: 'CHEN_WEI', role: '结构工程师', wakeDay: 43 },
-  { name: 'KIM_S', role: '导航官', wakeDay: 43 },
-  { name: 'SMITH_J', role: '医疗官', wakeDay: 67 },
-  { name: 'YANOV_K', role: '核工程师', wakeDay: 67 },
-  { name: 'ZHANG_LI', role: '生命支持', wakeDay: 89 },
-  { name: 'GARCIA_M', role: '系统工程师', wakeDay: 89 },
-  { name: 'PATEL_R', role: '生物学家', wakeDay: 75 },
-  { name: 'MÜLLER_H', role: '地质学家', wakeDay: 55 },
+  { name: 'CHEN_WEI', role: 'Structural Engineer', wakeDay: 43 },
+  { name: 'KIM_S', role: 'Navigation', wakeDay: 43 },
+  { name: 'SMITH_J', role: 'Medical Officer', wakeDay: 67 },
+  { name: 'YANOV_K', role: 'Nuclear Engineer', wakeDay: 67 },
+  { name: 'ZHANG_LI', role: 'Life Support', wakeDay: 89 },
+  { name: 'GARCIA_M', role: 'Systems Engineer', wakeDay: 89 },
+  { name: 'PATEL_R', role: 'Biologist', wakeDay: 75 },
+  { name: 'MÜLLER_H', role: 'Geologist', wakeDay: 55 },
 ];
 
 const statusStyles: Record<PodStatus, { bg: string; border: string; dot: string }> = {
@@ -84,13 +96,15 @@ const statusStyles: Record<PodStatus, { bg: string; border: string; dot: string 
   WARNING: { bg: 'rgba(255,170,0,0.08)', border: 'rgba(255,170,0,0.4)', dot: 'bg-amber-400' },
   DORMANT: { bg: 'rgba(0,50,100,0.1)', border: 'rgba(0,100,200,0.2)', dot: 'bg-blue-400/50' },
   CRITICAL: { bg: 'rgba(255,0,0,0.1)', border: 'rgba(255,50,50,0.6)', dot: 'bg-red-500' },
-  WAKING: { bg: 'rgba(255,100,0,0.15)', border: 'rgba(255,100,0,0.7)', dot: 'bg-orange-500 animate-bounce' },
+  WAKING: { bg: 'rgba(255,140,0,0.1)', border: 'rgba(255,140,0,0.6)', dot: 'bg-orange-400' },
+  AWAKE: { bg: 'rgba(0,255,136,0.1)', border: 'rgba(0,255,136,0.6)', dot: 'bg-green-400' },
 };
 
 export default function PodsPage() {
-  const { podOverrides, pendingDecisions } = useAeonStore();
-  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
+  const { podOverrides: storePodOverrides } = useAeonStore();
+  const overrideBadge = useOverrideBadge();
   const navigate = useNavigate();
+  const [podOverrides, setPodOverrides] = useState<Record<string, string>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
   const [filter, setFilter] = useState<PodStatus | 'ALL'>('ALL');
@@ -99,7 +113,7 @@ export default function PodsPage() {
   const [lifeSignsPage, setLifeSignsPage] = useState(0);
   const [displayedTitle, setDisplayedTitle] = useState('');
   const [titleDone, setTitleDone] = useState(false);
-  const fullTitle = '休眠舱监控系统 · POD MONITORING SYSTEM';
+  const fullTitle = 'POD MONITORING SYSTEM';
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const pods = useMemo<Pod[]>(() => {
@@ -110,33 +124,96 @@ export default function PodsPage() {
       if (idNum >= 124 && idNum <= 125) status = 'DORMANT';
       if (idNum >= 126) status = 'CRITICAL';
       const id = `POD-${String(idNum).padStart(3, '0')}`;
-      const over = localStorage.getItem(`podOverride_${id}`);
-      const effectiveStatus = over || podOverrides[id] || status;
       return {
         id,
         name: randomName(i),
         role: randomRole(i),
-        status: effectiveStatus as PodStatus,
+        status,
         heartRate: 45 + ((i * 17 + 5) % 21),
         temperature: +(35.5 + ((i * 13 + 7) % 16) / 10).toFixed(1),
         metabolism: 15 + ((i * 11 + 3) % 11),
         pod: idNum,
       };
     });
-  }, [podOverrides]);
+  }, []);
+
+  const reloadPodOverridesFromStorage = useCallback(() => {
+    const overrides: Record<string, string> = {};
+    for (let i = 1; i <= 127; i++) {
+      const podId = `POD-${String(i).padStart(3, '0')}`;
+      const override = localStorage.getItem(`podOverride_${podId}`);
+      if (override) overrides[podId] = override;
+    }
+    setPodOverrides(overrides);
+  }, []);
+
+  useEffect(() => {
+    reloadPodOverridesFromStorage();
+  }, [reloadPodOverridesFromStorage]);
+
+  useEffect(() => {
+    const sync = () => reloadPodOverridesFromStorage();
+    window.addEventListener('focus', sync);
+    window.addEventListener('storage', sync);
+    window.addEventListener('aeonguard:podOverride', sync);
+    return () => {
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('aeonguard:podOverride', sync);
+    };
+  }, [reloadPodOverridesFromStorage]);
+
+  const getEffectiveStatus = useCallback(
+    (pod: Pod): PodStatus => {
+      const o = podOverrides[pod.id] || storePodOverrides[pod.id];
+      return (o as PodStatus) || pod.status;
+    },
+    [podOverrides, storePodOverrides]
+  );
+
+  const handleStatusChange = useCallback((podId: string, newStatus: PodStatus) => {
+    if (newStatus === 'DORMANT') {
+      localStorage.removeItem(`podOverride_${podId}`);
+      setPodOverrides(prev => {
+        const updated = { ...prev };
+        delete updated[podId];
+        return updated;
+      });
+    } else {
+      localStorage.setItem(`podOverride_${podId}`, newStatus);
+      setPodOverrides(prev => ({ ...prev, [podId]: newStatus }));
+      window.dispatchEvent(new Event('aeonguard:podOverride'));
+    }
+  }, []);
 
   const counts = useMemo(
     () => ({
       ALL: pods.length,
-      NOMINAL: pods.filter(p => p.status === 'NOMINAL').length,
-      WARNING: pods.filter(p => p.status === 'WARNING').length,
-      DORMANT: pods.filter(p => p.status === 'DORMANT').length,
-      CRITICAL: pods.filter(p => p.status === 'CRITICAL').length,
+      NOMINAL: pods.filter(p => getEffectiveStatus(p) === 'NOMINAL').length,
+      WARNING: pods.filter(p => getEffectiveStatus(p) === 'WARNING').length,
+      DORMANT: pods.filter(p => getEffectiveStatus(p) === 'DORMANT').length,
+      CRITICAL: pods.filter(p => getEffectiveStatus(p) === 'CRITICAL').length,
+      WAKING: pods.filter(p => getEffectiveStatus(p) === 'WAKING').length,
+      AWAKE: pods.filter(p => getEffectiveStatus(p) === 'AWAKE').length,
     }),
-    [pods]
+    [pods, getEffectiveStatus]
   );
 
-  const filteredPods = filter === 'ALL' ? pods : pods.filter(p => p.status === filter);
+  const filteredPods =
+    filter === 'ALL' ? pods : pods.filter(p => getEffectiveStatus(p) === filter);
+
+  const wakingPods = useMemo(
+    () => Object.entries(podOverrides).filter(([, status]) => status === 'WAKING'),
+    [podOverrides]
+  );
+
+  const alertPods = useMemo(
+    () => pods.filter(p => {
+      const s = getEffectiveStatus(p);
+      return s === 'WARNING' || s === 'CRITICAL';
+    }),
+    [pods, getEffectiveStatus]
+  );
 
   useEffect(() => {
     let i = 0;
@@ -315,8 +392,6 @@ export default function PodsPage() {
     return () => clearInterval(iv);
   }, []);
 
-  const alertPods = useMemo(() => pods.filter(p => p.status === 'WARNING' || p.status === 'CRITICAL'), [pods]);
-
   const vitalsHistory = useMemo(() => {
     if (!selectedPod) return [];
     return Array.from({ length: 24 }, (_, i) => ({
@@ -338,18 +413,9 @@ export default function PodsPage() {
     []
   );
 
-  const langLabels: Record<string, string> = { zh: '中文', en: 'ENG', mixed: '混合' };
-  const currentLang = localStorage.getItem('lang') || 'zh';
-
   const handleLogout = () => {
     localStorage.removeItem('aeonguard_auth');
     navigate('/');
-  };
-  const cycleLanguage = () => {
-    const langs = ['zh', 'en', 'mixed'];
-    const nextLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
-    localStorage.setItem('lang', nextLang);
-    window.location.reload();
   };
 
   const PODS_PER_PAGE = 10;
@@ -373,18 +439,18 @@ export default function PodsPage() {
       <nav className="fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-cyan-500/30 bg-[#000d1a]/80 px-4 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
         <div className="flex items-center gap-2 font-bold tracking-[0.2em]">
           <Terminal size={18} className="text-cyan-400" />
-          <span>AEONGUARD · 永卫系统</span>
+          <span>AEONGUARD</span>
         </div>
         <div className="flex-1 overflow-hidden mx-8 border-x border-cyan-500/10">
           <div className="animate-[ticker_60s_linear_infinite] whitespace-nowrap text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-widest text-cyan-500/80">
             {[0, 1].map(dup => (
               <React.Fragment key={dup}>
-                <span className="mx-4">🟢 休眠舱: 127/127 ACTIVE</span>
-                <span className="mx-4">🟢 生命体征: ALL NOMINAL</span>
-                <span className="mx-4">🟢 舱内温度: 36.1°C AVG</span>
-                <span className="mx-4">🟢 心率监控: 52 BPM AVG</span>
-                <span className="mx-4">🟢 新陈代谢: 18% AVG</span>
-                <span className="mx-4">🟢 下次轮换: 43天</span>
+                <span className="mx-4">🟢 HIBERNATION PODS: 127/127 ACTIVE</span>
+                <span className="mx-4">🟢 VITALS: ALL NOMINAL</span>
+                <span className="mx-4">🟢 CABIN TEMP: 36.1°C AVG</span>
+                <span className="mx-4">🟢 HEART RATE MONITOR: 52 BPM AVG</span>
+                <span className="mx-4">🟢 METABOLISM: 18% AVG</span>
+                <span className="mx-4">🟢 NEXT ROTATION: 43 DAYS</span>
               </React.Fragment>
             ))}
           </div>
@@ -393,10 +459,6 @@ export default function PodsPage() {
           <div className="flex items-center gap-2 mr-2">
             <button onClick={() => window.location.reload()} className="p-1.5 border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors text-cyan-400/60 hover:text-cyan-400">
               <RefreshCw size={14} />
-            </button>
-            <button onClick={cycleLanguage} className="flex items-center gap-2 px-3 py-1 border border-cyan-400/50 bg-cyan-400/5 text-cyan-400 hover:bg-cyan-400/10 transition-all font-mono">
-              <Languages size={14} />
-              <span>{langLabels[currentLang]}</span>
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -426,30 +488,48 @@ export default function PodsPage() {
           </div>
           <div className={`flex flex-col gap-4 ${sidebarOpen ? '' : 'mt-6'}`}>
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">核心系统 CORE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">CORE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="主页 HOME" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" active collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="HOME" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="POD MONITORING" active collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="HABITAT ALERT" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI ENGINE" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="HUMAN OVERRIDE" badge={overrideBadge} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">档案 ARCHIVE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">ARCHIVE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="任务档案 MISSION" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="机组名单 CREW" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="系统日志 SYSLOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="MISSION LOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="CREW ROSTER" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="SYSTEM LOG" collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
-            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="设置 SETTINGS" collapsed={!sidebarOpen} />
+            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="SETTINGS" collapsed={!sidebarOpen} />
           </div>
         </aside>
 
         <main className={`flex-1 overflow-y-auto overflow-x-hidden bg-[#000d1a] transition-all duration-300 ease-in-out ${sidebarOpen ? 'ml-[14vw]' : 'ml-[48px]'}`}>
+          {wakingPods.length > 0 && (
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 10,
+                background: 'rgba(255,140,0,0.1)',
+                border: '1px solid rgba(255,140,0,0.4)',
+                padding: '8px 16px',
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                color: '#ffaa00',
+                letterSpacing: '0.2em',
+              }}
+            >
+              ⚡ {wakingPods.length} POD ACTIVATION IN PROGRESS
+            </div>
+          )}
           <div className="border-b border-cyan-500/20 bg-[#000814]/90 p-6 pb-3">
             <h1 className="text-[clamp(1.2rem,1.8vw,1.8rem)] font-bold tracking-[0.3em] text-cyan-400 mb-2">
               {displayedTitle}
@@ -478,10 +558,11 @@ export default function PodsPage() {
           {/* SECTION 1 — MAIN MONITORING */}
           <div className="flex gap-0 min-h-[calc(100vh-48px-80px)] bg-[#000d1a]">
             <div className="w-[65%] p-6 border-r border-cyan-500/10 bg-[#000d1a]">
-              <div className="flex gap-2 mb-4">
+              <div className="flex flex-wrap gap-2 mb-4">
                 {(['ALL', 'NOMINAL', 'WARNING', 'CRITICAL'] as const).map(f => (
                   <button
                     key={f}
+                    type="button"
                     onClick={() => setFilter(f)}
                     className={`px-3 py-1.5 text-[clamp(0.55rem,0.65vw,0.7rem)] font-bold tracking-widest border transition-colors ${
                       filter === f
@@ -492,27 +573,70 @@ export default function PodsPage() {
                     {f} {counts[f]}
                   </button>
                 ))}
+                {counts.WAKING > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilter('WAKING')}
+                    className={`px-3 py-1.5 text-[clamp(0.55rem,0.65vw,0.7rem)] font-bold tracking-widest border transition-colors ${
+                      filter === 'WAKING'
+                        ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+                        : 'bg-transparent border-orange-500/20 text-orange-500/50 hover:border-orange-500/40 hover:text-orange-400/80'
+                    }`}
+                  >
+                    WAKING {counts.WAKING}
+                  </button>
+                )}
+                {counts.AWAKE > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilter('AWAKE')}
+                    className={`px-3 py-1.5 text-[clamp(0.55rem,0.65vw,0.7rem)] font-bold tracking-widest border transition-colors ${
+                      filter === 'AWAKE'
+                        ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                        : 'bg-transparent border-green-500/20 text-green-500/50 hover:border-green-500/40 hover:text-green-400/80'
+                    }`}
+                  >
+                    AWAKE {counts.AWAKE}
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(70px,1fr))] gap-2">
                 {filteredPods.map(pod => {
-                  const s = statusStyles[pod.status];
+                  const st = getEffectiveStatus(pod);
+                  const s = statusStyles[st];
                   const isSelected = selectedPod?.id === pod.id;
                   return (
                     <button
                       key={pod.id}
                       onClick={() => setSelectedPod(pod)}
-                      className={`relative p-1.5 text-left transition-all cursor-pointer ${pod.status === 'CRITICAL' || pod.status === 'WAKING' ? 'animate-pulse' : ''}`}
+                      className={`relative p-1.5 text-left transition-all cursor-pointer ${st === 'CRITICAL' || st === 'WAKING' ? 'animate-pulse' : ''}`}
                       style={{
                         backgroundColor: isSelected ? 'rgba(0,229,255,0.12)' : s.bg,
                         border: `1px solid ${isSelected ? 'rgba(0,229,255,0.6)' : s.border}`,
-                        boxShadow: pod.status === 'CRITICAL' ? '0 0 8px rgba(255,50,50,0.3)' : pod.status === 'WAKING' ? '0 0 10px rgba(255,100,0,0.5)' : isSelected ? '0 0 8px rgba(0,229,255,0.2)' : 'none',
+                        boxShadow:
+                          st === 'CRITICAL'
+                            ? '0 0 8px rgba(255,50,50,0.3)'
+                            : st === 'WAKING'
+                              ? '0 0 12px rgba(255,140,0,0.55)'
+                              : st === 'AWAKE'
+                                ? '0 0 10px rgba(0,255,136,0.35)'
+                                : isSelected
+                                  ? '0 0 8px rgba(0,229,255,0.2)'
+                                  : 'none',
                       }}
                     >
                       <div className="text-[clamp(0.45rem,0.55vw,0.6rem)] font-bold tracking-wider text-cyan-400/80 mb-1">{pod.id}</div>
                       <div className="flex items-center gap-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                        <span className={`text-[clamp(0.375rem,0.45vw,0.5rem)] opacity-40 truncate ${pod.status === 'WAKING' ? 'text-orange-400 opacity-100 font-bold' : ''}`}>
-                          {pod.status === 'WAKING' ? 'WAKING UP' : pod.status}
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+                        {st === 'WAKING' && (
+                          <Loader2 className="shrink-0 text-orange-400 animate-spin" size={10} strokeWidth={2.5} aria-hidden />
+                        )}
+                        <span
+                          className={`text-[clamp(0.375rem,0.45vw,0.5rem)] opacity-40 truncate ${
+                            st === 'WAKING' ? 'text-orange-400 opacity-100 font-bold' : st === 'AWAKE' ? 'text-green-400 opacity-100 font-bold' : ''
+                          }`}
+                        >
+                          {st === 'WAKING' ? 'WAKING' : st === 'AWAKE' ? 'AWAKE' : st}
                         </span>
                       </div>
                     </button>
@@ -531,7 +655,7 @@ export default function PodsPage() {
                 }}>── HIBERNATION POD STATUS DISPLAY ──</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   {[pods[0], pods[118], pods[125]].map(pod => (
-                    <HibernationPodVisual key={pod.id} pod={pod} />
+                    <HibernationPodVisual key={pod.id} pod={pod} effectiveStatus={getEffectiveStatus(pod)} />
                   ))}
                 </div>
               </div>
@@ -539,9 +663,20 @@ export default function PodsPage() {
 
             <div className="w-[35%] p-6 bg-[#000814]/50 h-full overflow-y-auto">
               {selectedPod ? (
-                <PodDetail pod={selectedPod} vitalsHistory={vitalsHistory} />
+                <PodDetail
+                  pod={{ ...selectedPod, status: getEffectiveStatus(selectedPod) }}
+                  vitalsHistory={vitalsHistory}
+                  onStatusChange={handleStatusChange}
+                />
               ) : (
-                <RightPanel counts={counts} pods={pods} fleetHR={fleetHR} alertPods={alertPods} onSelectPod={setSelectedPod} />
+                <RightPanel
+                  counts={counts}
+                  pods={pods}
+                  fleetHR={fleetHR}
+                  alertPods={alertPods}
+                  onSelectPod={setSelectedPod}
+                  getStatus={getEffectiveStatus}
+                />
               )}
             </div>
           </div>
@@ -657,11 +792,16 @@ export default function PodsPage() {
               </div>
               <div key={lifeSignsPage}>
                 {currentPagePods.map(pod => {
+                  const st = getEffectiveStatus(pod);
                   const rowStyle =
-                    pod.status === 'WARNING'
+                    st === 'WARNING'
                       ? 'border-l-2 border-amber-500/60 bg-[rgba(255,170,0,0.02)]'
-                      : pod.status === 'CRITICAL'
+                      : st === 'CRITICAL'
                       ? 'border-l-2 border-red-500/60 bg-[rgba(255,0,0,0.03)] animate-pulse'
+                      : st === 'WAKING'
+                      ? 'border-l-2 border-orange-500/70 bg-[rgba(255,140,0,0.04)] animate-pulse'
+                      : st === 'AWAKE'
+                      ? 'border-l-2 border-green-500/60 bg-[rgba(0,255,136,0.04)]'
                       : 'border-l-2 border-cyan-500/20';
                   return (
                     <div key={pod.id} className={`flex items-center gap-4 border-b border-cyan-500/5 py-2 px-3 ${rowStyle}`}>
@@ -674,26 +814,45 @@ export default function PodsPage() {
                           <span className="text-[clamp(0.45rem,0.5vw,0.55rem)] tracking-widest text-cyan-500/30">{pod.role}</span>
                           <span
                             className={`text-[clamp(0.4rem,0.45vw,0.5rem)] font-bold tracking-widest px-1.5 py-0.5 border ${
-                              pod.status === 'NOMINAL'
+                              st === 'NOMINAL'
                                 ? 'text-cyan-400/70 border-cyan-500/20 bg-cyan-500/5'
-                                : pod.status === 'WARNING'
+                                : st === 'WARNING'
                                 ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
-                                : pod.status === 'CRITICAL'
+                                : st === 'CRITICAL'
                                 ? 'text-red-400 border-red-500/30 bg-red-500/10'
+                                : st === 'WAKING'
+                                ? 'text-orange-400 border-orange-500/40 bg-orange-500/10'
+                                : st === 'AWAKE'
+                                ? 'text-green-400 border-green-500/40 bg-green-500/10'
                                 : 'text-blue-400/50 border-blue-500/20 bg-blue-500/5'
                             }`}
                           >
-                            {pod.status}
+                            {st === 'WAKING' ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Loader2 className="animate-spin" size={10} />
+                                WAKING
+                              </span>
+                            ) : (
+                              st
+                            )}
                           </span>
                         </div>
                       </div>
                       <div className="flex-1 border border-cyan-500/5 bg-black/30 px-1">
-                        <EcgCanvas status={pod.status} />
+                        <EcgCanvas status={st} />
                       </div>
                       <div className="w-[120px] shrink-0 text-right">
                         <div
                           className={`text-[clamp(0.7rem,0.85vw,0.9rem)] font-bold tracking-wider ${
-                            pod.status === 'CRITICAL' ? 'text-red-400' : pod.status === 'WARNING' ? 'text-amber-400' : 'text-cyan-400'
+                            st === 'CRITICAL'
+                              ? 'text-red-400'
+                              : st === 'WARNING'
+                                ? 'text-amber-400'
+                                : st === 'WAKING'
+                                  ? 'text-orange-400'
+                                  : st === 'AWAKE'
+                                    ? 'text-green-400'
+                                    : 'text-cyan-400'
                           }`}
                         >
                           {pod.heartRate} <span className="text-[clamp(0.45rem,0.5vw,0.55rem)] opacity-50">BPM</span>
@@ -1095,17 +1254,22 @@ function buildPageNumbers(current: number, total: number) {
   return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
-function HibernationPodVisual({ pod }: { pod: Pod }) {
-  const theme = {
+function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveStatus: PodStatus }) {
+  const theme: Record<PodStatus, { primary: string; secondary: string; glow: string; bg: string }> = {
     NOMINAL:  { primary: '#00e5ff', secondary: '#004466', glow: 'rgba(0,229,255,0.2)',  bg: 'rgba(0,8,20,0.95)'  },
     WARNING:  { primary: '#ffaa00', secondary: '#442200', glow: 'rgba(255,170,0,0.25)', bg: 'rgba(10,5,0,0.95)'  },
     CRITICAL: { primary: '#ff3333', secondary: '#440000', glow: 'rgba(255,50,50,0.35)', bg: 'rgba(15,0,0,0.95)'  },
     DORMANT:  { primary: '#3355aa', secondary: '#001133', glow: 'rgba(50,80,180,0.15)', bg: 'rgba(0,3,12,0.95)'  },
+    WAKING:   { primary: '#ff8800', secondary: '#331a00', glow: 'rgba(255,140,0,0.4)', bg: 'rgba(25,12,0,0.95)'  },
+    AWAKE:    { primary: '#00ff88', secondary: '#003322', glow: 'rgba(0,255,136,0.35)', bg: 'rgba(0,20,12,0.95)'  },
   };
-  const t = theme[pod.status];
-  const isCritical = pod.status === 'CRITICAL';
-  const isWarning = pod.status === 'WARNING';
-  const isDormant = pod.status === 'DORMANT';
+  const status = effectiveStatus;
+  const t = theme[status];
+  const isCritical = status === 'CRITICAL';
+  const isWarning = status === 'WARNING';
+  const isDormant = status === 'DORMANT';
+  const isWaking = status === 'WAKING';
+  const isAwake = status === 'AWAKE';
 
   return (
     <div style={{
@@ -1115,7 +1279,7 @@ function HibernationPodVisual({ pod }: { pod: Pod }) {
       boxShadow: `0 0 30px ${t.glow}, inset 0 0 40px ${t.secondary}`,
       position: 'relative',
       overflow: 'hidden',
-      animation: isCritical ? 'podPulse 0.8s infinite' : isWarning ? 'podPulse 2.5s infinite' : isDormant ? 'none' : 'podGlow 5s ease-in-out infinite',
+      animation: isCritical ? 'podPulse 0.8s infinite' : isWarning ? 'podPulse 2.5s infinite' : isWaking ? 'podPulse 1.2s infinite' : isAwake ? 'podGlow 3s ease-in-out infinite' : isDormant ? 'none' : 'podGlow 5s ease-in-out infinite',
     }}>
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', opacity: isDormant ? 0.1 : 0.2,
@@ -1137,7 +1301,10 @@ function HibernationPodVisual({ pod }: { pod: Pod }) {
           fontSize: '9px', fontFamily: 'monospace', color: t.primary,
           letterSpacing: '0.2em', fontWeight: 'bold',
           animation: isCritical ? 'blink 0.8s infinite' : 'none',
-        }}>{pod.status}</span>
+        }}>{isWaking ? 'WAKING' : isAwake ? 'AWAKE' : status}</span>
+        {isWaking && (
+          <Loader2 size={12} className="text-orange-400 animate-spin shrink-0" aria-hidden />
+        )}
         {(isWarning || isCritical) && (
           <span style={{ fontSize: '11px', animation: 'blink 1s infinite' }}>⚠</span>
         )}
@@ -1174,7 +1341,7 @@ function HibernationPodVisual({ pod }: { pod: Pod }) {
           <path d="M 31.5 33 Q 39 43.5 40.5 52.5" fill="none" stroke={t.primary} strokeWidth="1.2" opacity="0.6" />
           <path d="M 18 60 Q 15 75 14.25 85.5" fill="none" stroke={t.primary} strokeWidth="1.2" opacity="0.6" />
           <path d="M 27 60 Q 30 75 30.75 85.5" fill="none" stroke={t.primary} strokeWidth="1.2" opacity="0.6" />
-          {(pod.status === 'NOMINAL' || isDormant) && (
+          {(status === 'NOMINAL' || isDormant || isAwake) && (
             <>
               <line x1="16.5" y1="37.5" x2="19.5" y2="43.5" stroke={`${t.primary}50`} strokeWidth="0.5" />
               <line x1="25.5" y1="34.5" x2="28.5" y2="40.5" stroke={`${t.primary}50`} strokeWidth="0.5" />
@@ -1203,7 +1370,7 @@ function HibernationPodVisual({ pod }: { pod: Pod }) {
       </div>
 
       <div style={{ borderTop: `1px solid ${t.primary}15` }}>
-        <EcgCanvas status={pod.status} />
+        <EcgCanvas status={status} />
       </div>
 
       <div style={{
@@ -1232,14 +1399,25 @@ function EcgCanvas({ status }: { status: PodStatus }) {
     const buffer: number[] = new Array(w).fill(h / 2);
     let t = Math.random() * 200;
     let animId = 0;
-    const isActive = status === 'WARNING' || status === 'CRITICAL' || status === 'NOMINAL';
-    const speed = status === 'CRITICAL' ? 3 : status === 'WARNING' ? 2 : 1.4;
-    const color = status === 'CRITICAL' ? '#ff4444' : status === 'WARNING' ? '#ffaa00' : 'rgba(0,229,255,0.35)';
+    const isActive =
+      status === 'WARNING' || status === 'CRITICAL' || status === 'NOMINAL' || status === 'WAKING' || status === 'AWAKE';
+    const speed =
+      status === 'CRITICAL' ? 3 : status === 'WARNING' ? 2 : status === 'WAKING' ? 2.2 : status === 'AWAKE' ? 1.6 : 1.4;
+    const color =
+      status === 'CRITICAL'
+        ? '#ff4444'
+        : status === 'WARNING'
+          ? '#ffaa00'
+          : status === 'WAKING'
+            ? '#ff8800'
+            : status === 'AWAKE'
+              ? '#00ff88'
+              : 'rgba(0,229,255,0.35)';
     const draw = () => {
       t += speed;
       let y: number;
-      if (status === 'CRITICAL' || status === 'WARNING') {
-        const period = status === 'CRITICAL' ? 40 : 60;
+      if (status === 'CRITICAL' || status === 'WARNING' || status === 'WAKING') {
+        const period = status === 'CRITICAL' ? 40 : status === 'WAKING' ? 50 : 60;
         const phase = t % period;
         if (phase < 2) y = h / 2;
         else if (phase < 4) y = h / 2 - h * 0.38;
@@ -1274,12 +1452,14 @@ function RightPanel({
   fleetHR,
   alertPods,
   onSelectPod,
+  getStatus,
 }: {
   counts: Record<string, number>;
   pods: Pod[];
   fleetHR: Array<{ t: number; bpm: number }>;
   alertPods: Pod[];
   onSelectPod: (pod: Pod) => void;
+  getStatus: (p: Pod) => PodStatus;
 }) {
   const avgHR = Math.round(pods.reduce((a, p) => a + p.heartRate, 0) / pods.length);
   const avgTemp = (pods.reduce((a, p) => a + p.temperature, 0) / pods.length).toFixed(1);
@@ -1353,7 +1533,8 @@ function RightPanel({
         <div className="text-[clamp(0.6rem,0.7vw,0.75rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-2">── ACTIVE ALERTS ──</div>
         <div className="overflow-y-auto space-y-1" style={{ maxHeight: 160 }}>
           {alertPods.map(pod => {
-            const isCritical = pod.status === 'CRITICAL';
+            const st = getStatus(pod);
+            const isCritical = st === 'CRITICAL';
             return (
               <button
                 key={pod.id}
@@ -1368,7 +1549,7 @@ function RightPanel({
                   <span className={`font-bold ${isCritical ? 'text-red-400' : 'text-amber-400'}`}>{pod.id}</span>
                   <span className="opacity-40 truncate">{pod.name}</span>
                 </div>
-                <span className="opacity-50 whitespace-nowrap ml-2">{alertDescriptions[pod.id] || pod.status}</span>
+                <span className="opacity-50 whitespace-nowrap ml-2">{alertDescriptions[pod.id] || st}</span>
               </button>
             );
           })}
@@ -1398,13 +1579,22 @@ function RightPanel({
   );
 }
 
-function PodDetail({ pod, vitalsHistory }: { pod: Pod; vitalsHistory: Array<{ hour: string; hr: number; temp: number; meta: number }> }) {
+function PodDetail({
+  pod,
+  vitalsHistory,
+  onStatusChange,
+}: {
+  pod: Pod;
+  vitalsHistory: Array<{ hour: string; hr: number; temp: number; meta: number }>;
+  onStatusChange: (podId: string, newStatus: PodStatus) => void;
+}) {
   const statusColor: Record<PodStatus, string> = {
     NOMINAL: 'text-cyan-400 bg-cyan-500/15 border-cyan-500/30',
     WARNING: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
     DORMANT: 'text-blue-400 bg-blue-500/15 border-blue-500/30',
     CRITICAL: 'text-red-400 bg-red-500/15 border-red-500/30',
     WAKING: 'text-orange-400 bg-orange-500/15 border-orange-500/30 font-bold animate-pulse',
+    AWAKE: 'text-green-400 bg-green-500/15 border-green-500/30 font-bold',
   };
   const vitalBar = (value: number, max: number, color: string) => {
     const pct = Math.min(100, (value / max) * 100);
@@ -1496,17 +1686,99 @@ function PodDetail({ pod, vitalsHistory }: { pod: Pod; vitalsHistory: Array<{ ho
           </div>
         </div>
       </div>
-      <div className="relative group/wake pt-2">
-        <button
-          disabled
-          className="w-full py-2.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[clamp(0.6rem,0.7vw,0.75rem)] font-bold tracking-[0.2em] opacity-50 cursor-not-allowed"
+      {pod.status === 'WAKING' && (
+        <div
+          style={{
+            padding: '12px',
+            border: '1px solid rgba(255,140,0,0.4)',
+            background: 'rgba(255,140,0,0.05)',
+            marginTop: '12px',
+          }}
         >
-          WAKE OCCUPANT
-        </button>
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-[#000d1a] border border-amber-500/30 text-[clamp(0.5rem,0.55vw,0.6rem)] text-amber-400 tracking-widest whitespace-nowrap opacity-0 group-hover/wake:opacity-100 transition-opacity pointer-events-none">
-          Requires AI Authorization
+          <div style={{ fontSize: '10px', color: '#ffaa00', letterSpacing: '0.2em', marginBottom: '8px' }}>
+            ── WAKING SEQUENCE IN PROGRESS ──
+          </div>
+          <div style={{ fontSize: '9px', opacity: 0.5, marginBottom: '8px' }}>解冻程序进行中 · 预计需要 45 分钟</div>
+          <button
+            type="button"
+            onClick={() => onStatusChange(pod.id, 'AWAKE')}
+            style={{
+              width: '100%',
+              padding: '10px',
+              background: 'rgba(0,255,136,0.1)',
+              border: '1px solid #00ff88',
+              color: '#00ff88',
+              fontFamily: 'monospace',
+              cursor: 'pointer',
+              letterSpacing: '0.2em',
+            }}
+          >
+            ✓ CONFIRM AWAKE
+          </button>
         </div>
-      </div>
+      )}
+
+      {pod.status === 'AWAKE' && (
+        <div
+          style={{
+            padding: '12px',
+            border: '1px solid rgba(0,255,136,0.3)',
+            background: 'rgba(0,255,136,0.03)',
+            marginTop: '12px',
+          }}
+        >
+          <div style={{ fontSize: '10px', color: '#00ff88', letterSpacing: '0.2em', marginBottom: '8px' }}>
+            ── CURRENTLY ON DUTY ──
+          </div>
+          <div style={{ fontSize: '9px', opacity: 0.5, marginBottom: '12px' }}>Mission in progress · return to hibernation when complete</div>
+          <button
+            type="button"
+            onClick={() => onStatusChange(pod.id, 'DORMANT')}
+            style={{
+              width: '100%',
+              padding: '10px',
+              background: 'rgba(0,100,200,0.1)',
+              border: '1px solid rgba(0,150,255,0.4)',
+              color: 'rgba(0,200,255,0.8)',
+              fontFamily: 'monospace',
+              cursor: 'pointer',
+              letterSpacing: '0.2em',
+              marginBottom: '8px',
+            }}
+          >
+            ↩ RETURN TO HIBERNATION
+          </button>
+          <div style={{ fontSize: '8px', opacity: 0.3, textAlign: 'center' }}>Status resets to DORMANT after return</div>
+        </div>
+      )}
+
+      {pod.status === 'DORMANT' && (
+        <div className="pt-2">
+          <button
+            type="button"
+            disabled
+            style={{ opacity: 0.5, cursor: 'not-allowed' }}
+            className="w-full py-2.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[clamp(0.6rem,0.7vw,0.75rem)] font-bold tracking-[0.2em]"
+          >
+            WAKE OCCUPANT · Requires AI Authorization
+          </button>
+        </div>
+      )}
+
+      {pod.status !== 'WAKING' && pod.status !== 'AWAKE' && pod.status !== 'DORMANT' && (
+        <div className="relative group/wake pt-2">
+          <button
+            type="button"
+            disabled
+            className="w-full py-2.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[clamp(0.6rem,0.7vw,0.75rem)] font-bold tracking-[0.2em] opacity-50 cursor-not-allowed"
+          >
+            WAKE OCCUPANT
+          </button>
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-[#000d1a] border border-amber-500/30 text-[clamp(0.5rem,0.55vw,0.6rem)] text-amber-400 tracking-widest whitespace-nowrap opacity-0 group-hover/wake:opacity-100 transition-opacity pointer-events-none">
+            Requires AI Authorization
+          </div>
+        </div>
+      )}
     </div>
   );
 }

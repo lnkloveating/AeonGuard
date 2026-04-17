@@ -15,16 +15,14 @@ import {
   ChevronRight,
   ChevronLeft,
   RefreshCw,
-  Languages
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import EarthScene from '../components/EarthScene';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useAeonStore } from '../store/aeonStore';
+import { useOverrideBadge } from '../hooks/useOverrideBadge';
 
 export default function HomePage() {
-  const { pendingDecisions } = useAeonStore();
-  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
+  const overrideBadge = useOverrideBadge();
   const navigate = useNavigate();
 
   const heroFullText = '流浪地球计划 · WANDERING EARTH PROJECT';
@@ -332,14 +330,6 @@ export default function HomePage() {
     navigate('/');
   };
 
-  const cycleLanguage = () => {
-    const langs = ['zh', 'en', 'mixed'];
-    const currentLang = localStorage.getItem('lang') || 'zh';
-    const nextLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
-    localStorage.setItem('lang', nextLang);
-    window.location.reload();
-  };
-
   const handleCardClick = (index: number, route: string) => {
     if (scanningCard !== null) return;
     setScanningCard(index);
@@ -348,9 +338,6 @@ export default function HomePage() {
       navigate(route);
     }, 400);
   };
-
-  const langLabels: Record<string, string> = { zh: '中文', en: 'ENG', mixed: '混合' };
-  const currentLang = localStorage.getItem('lang') || 'zh';
 
   return (
     <div className="flex h-screen w-full flex-col bg-[#000d1a] font-mono text-cyan-400 selection:bg-cyan-500/30">
@@ -369,24 +356,30 @@ export default function HomePage() {
       <nav className="fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-cyan-500/30 bg-[#000d1a]/80 px-4 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
         <div className="flex items-center gap-2 font-bold tracking-[0.2em]">
           <Terminal size={18} className="text-cyan-400" />
-          <span>AEONGUARD · 永卫系统</span>
+          <span>AEONGUARD</span>
         </div>
         <div className="flex-1 overflow-hidden mx-8 border-x border-cyan-500/10">
           <div className="animate-[ticker_60s_linear_infinite] whitespace-nowrap text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-widest text-cyan-500/80">
             {[0, 1].map(dup => (
               <React.Fragment key={dup}>
-                <span className="mx-4">🟢 引擎输出: {tickerStats.engine}%</span>
+                <span className="mx-4">🟢 ENGINE OUTPUT: {tickerStats.engine}%</span>
                 <span className="mx-4 text-amber-400">⚠ WARNING: EXTERNAL TEMP -272°C · HULL BREACH RISK: NONE</span>
-                <span className="mx-4">🟢 休眠舱: {tickerStats.pods}/127</span>
+                <span className="mx-4">🟢 HIBERNATION PODS: {tickerStats.pods}/127</span>
                 <span className="mx-4">► NEXT GRAVITATIONAL ASSIST: JUPITER +127 DAYS</span>
-                <span className="mx-4">🟢 氧气: {tickerStats.oxygen}%</span>
+                <span className="mx-4">🟢 O₂: {tickerStats.oxygen}%</span>
                 <span className="mx-4">► FUSION REACTOR OUTPUT: STABLE · CORE TEMP: 5,500°C</span>
-                <span className="mx-4">🟢 位置: 距太阳 0.8 光年</span>
+                <span className="mx-4">🟢 DISTANCE FROM SUN: 0.8 LY</span>
                 <span className="mx-4">► SURFACE: UNINHABITABLE · POPULATION UNDERGROUND: 3.5 BILLION</span>
-                <span className="mx-4">🟢 外部温度: {tickerStats.temp}°C</span>
+                <span className="mx-4">🟢 EXTERNAL TEMP: {tickerStats.temp}°C</span>
                 <span className="mx-4">► DISTANCE FROM SOL: 0.8 LY · HEADING: PROXIMA CENTAURI · ETA: 1,653 YEARS</span>
-                <span className="mx-4">🟢 下次轮换: 43天</span>
+                <span className="mx-4">🟢 NEXT ROTATION: 43 DAYS</span>
                 <span className="mx-4">► ALL CREW HIBERNATION PODS NOMINAL · NEXT ROTATION: 43 DAYS</span>
+                <span className="mx-4">[ CRYO-舱位 127/127 NOMINAL-正常态 · BIO-生物 SYSTEMS-系统 STABLE-稳定 ]</span>
+                <span className="mx-4">[ O₂-气体 LEVEL-水平: 85.2% · PRS-气压: 101.3 kPa · RAD-辐射: 12.4 mSv ]</span>
+                <span className="mx-4">[ NAV-导航 TRAJECTORY-轨迹 NOMINAL · PROXIMA-比邻星 ETA-预计: 1,653 YRS ]</span>
+                <span className="mx-4">[ AI-ENGINE-推理核心 STANDBY-待命 · No CRISIS-危机 ACTIVE-活跃 ]</span>
+                <span className="mx-4">[ EARTH-ENGINE-发动机 OUTPUT-输出: 98.4% · ALL GROUPS-组 NOMINAL-正常态 ]</span>
+                <span className="mx-4">[ ROTATION-轮换 CYCLE-周期 847-Q3 · NEXT-下次: 43 DAYS-天 ]</span>
               </React.Fragment>
             ))}
           </div>
@@ -395,10 +388,6 @@ export default function HomePage() {
           <div className="flex items-center gap-2 mr-2">
             <button onClick={() => window.location.reload()} className="p-1.5 border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors text-cyan-400/60 hover:text-cyan-400">
               <RefreshCw size={14} />
-            </button>
-            <button onClick={cycleLanguage} className="flex items-center gap-2 px-3 py-1 border border-cyan-400/50 bg-cyan-400/5 text-cyan-400 hover:bg-cyan-400/10 transition-all font-mono">
-              <Languages size={14} />
-              <span>{langLabels[currentLang]}</span>
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -425,22 +414,22 @@ export default function HomePage() {
           </div>
           <div className={`flex flex-col gap-4 ${sidebarOpen ? '' : 'mt-6'}`}>
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">核心系统 CORE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">CORE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="主页 HOME" active collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="HOME" active collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="POD MONITORING" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="HABITAT ALERT" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI ENGINE" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="HUMAN OVERRIDE" badge={overrideBadge} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">档案 ARCHIVE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">ARCHIVE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="任务档案 MISSION" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="机组名单 CREW" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="系统日志 SYSLOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="MISSION LOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="CREW ROSTER" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="SYSTEM LOG" collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
@@ -474,7 +463,7 @@ export default function HomePage() {
               </div>
             )}
             {sidebarOpen && <div className="h-[1px] w-full bg-cyan-500/10" />}
-            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="设置 SETTINGS" collapsed={!sidebarOpen} />
+            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="SETTINGS" collapsed={!sidebarOpen} />
           </div>
         </aside>
 
@@ -615,17 +604,17 @@ export default function HomePage() {
 
           {/* Section 2: System Modules */}
           <section className="p-[3vw] space-y-8 bg-cyan-500/[0.02] border-y border-cyan-500/10">
-            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">系统模块 · SYSTEM MODULES</h3>
+            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">SYSTEM MODULES</h3>
             <div className="grid grid-cols-2 gap-[2vw]">
               {/* Card 1: Pod Monitoring */}
               <div onClick={() => handleCardClick(0, '/dashboard/pods')} className="group relative flex flex-col bg-[rgba(0,15,30,0.9)] border border-[rgba(0,229,255,0.2)] hover:border-[rgba(0,229,255,0.6)] transition-colors overflow-hidden cursor-pointer" style={scanningCard === 0 ? { backgroundColor: 'rgba(0,229,255,0.08)' } : undefined}>
                 {scanningCard === 0 && <div className="absolute left-0 w-full h-[2px] z-10 animate-[scanline_0.4s_ease-out_forwards]" style={{ background: 'linear-gradient(90deg, transparent, #00e5ff, transparent)', boxShadow: '0 0 8px #00e5ff' }} />}
                 <div className="flex-1 p-[1.5vw] space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">休眠舱监控 / POD MONITORING</h4>
+                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">POD MONITORING</h4>
                     <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">127 ACTIVE</span>
                   </div>
-                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">实时监控127个休眠舱生命体征</p>
+                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">Real-time vitals for all 127 hibernation pods</p>
                   <div className="flex items-end gap-[3px] h-12 pt-2">
                     {[...Array(12)].map((_, i) => (
                       <motion.div
@@ -638,7 +627,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="border-t border-cyan-500/10 px-[1.5vw] py-3 flex items-center justify-between text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-[0.2em] text-cyan-500/60 group-hover:text-cyan-400 transition-colors">
-                  <span>进入系统 ENTER SYSTEM</span>
+                  <span>ENTER SYSTEM</span>
                   <ChevronRight size={14} />
                 </div>
               </div>
@@ -648,10 +637,10 @@ export default function HomePage() {
                 {scanningCard === 1 && <div className="absolute left-0 w-full h-[2px] z-10 animate-[scanline_0.4s_ease-out_forwards]" style={{ background: 'linear-gradient(90deg, transparent, #00e5ff, transparent)', boxShadow: '0 0 8px #00e5ff' }} />}
                 <div className="flex-1 p-[1.5vw] space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">环境警报 / HABITAT ALERTS</h4>
+                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">HABITAT ALERTS</h4>
                     <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">ALL NOMINAL</span>
                   </div>
-                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">氧气/辐射/气压三重监控系统</p>
+                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">O₂ / radiation / pressure monitoring</p>
                   <div className="flex justify-around items-center h-12 pt-2">
                     {[
                       { label: 'O₂', value: 85, color: '#22d3ee' },
@@ -670,7 +659,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="border-t border-cyan-500/10 px-[1.5vw] py-3 flex items-center justify-between text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-[0.2em] text-cyan-500/60 group-hover:text-cyan-400 transition-colors">
-                  <span>进入系统 ENTER SYSTEM</span>
+                  <span>ENTER SYSTEM</span>
                   <ChevronRight size={14} />
                 </div>
               </div>
@@ -680,10 +669,10 @@ export default function HomePage() {
                 {scanningCard === 2 && <div className="absolute left-0 w-full h-[2px] z-10 animate-[scanline_0.4s_ease-out_forwards]" style={{ background: 'linear-gradient(90deg, transparent, #00e5ff, transparent)', boxShadow: '0 0 8px #00e5ff' }} />}
                 <div className="flex-1 p-[1.5vw] space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">AI推理引擎 / AI ENGINE</h4>
+                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">AI ENGINE</h4>
                     <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">STANDBY</span>
                   </div>
-                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">危机响应自动推理与专家调度</p>
+                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">Automated crisis inference and specialist routing</p>
                   <div className="h-12 pt-2 overflow-hidden relative font-mono">
                     <motion.div
                       className="absolute left-0 top-0 w-full flex flex-col gap-1"
@@ -708,7 +697,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="border-t border-cyan-500/10 px-[1.5vw] py-3 flex items-center justify-between text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-[0.2em] text-cyan-500/60 group-hover:text-cyan-400 transition-colors">
-                  <span>进入系统 ENTER SYSTEM</span>
+                  <span>ENTER SYSTEM</span>
                   <ChevronRight size={14} />
                 </div>
               </div>
@@ -718,20 +707,20 @@ export default function HomePage() {
                 {scanningCard === 3 && <div className="absolute left-0 w-full h-[2px] z-10 animate-[scanline_0.4s_ease-out_forwards]" style={{ background: 'linear-gradient(90deg, transparent, #00e5ff, transparent)', boxShadow: '0 0 8px #00e5ff' }} />}
                 <div className="flex-1 p-[1.5vw] space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">人工决策 / OVERRIDE</h4>
-                    <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 animate-pulse">{pendingCount} PENDING</span>
+                    <h4 className="text-[clamp(0.8rem,1vw,1.1rem)] font-bold tracking-[0.2em]">HUMAN OVERRIDE</h4>
+                    <span className="text-[clamp(0.5rem,0.55vw,0.6875rem)] font-bold tracking-widest px-2 py-0.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 animate-pulse">{overrideBadge} PENDING</span>
                   </div>
-                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">待审批决策队列与风险评估</p>
+                  <p className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-widest opacity-50">Pending decision queue and risk review</p>
                   <div className="flex items-center gap-3 h-12 pt-2">
                     <div className="relative">
                       <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
                       <div className="absolute inset-0 w-3 h-3 rounded-full bg-red-500/50 animate-ping" />
                     </div>
-                    <span className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] font-bold tracking-[0.2em] text-red-400/80">{pendingCount} DECISIONS PENDING REVIEW</span>
+                    <span className="text-[clamp(0.5625rem,0.625vw,0.8125rem)] font-bold tracking-[0.2em] text-red-400/80">{overrideBadge} DECISIONS PENDING REVIEW</span>
                   </div>
                 </div>
                 <div className="border-t border-cyan-500/10 px-[1.5vw] py-3 flex items-center justify-between text-[clamp(0.5625rem,0.625vw,0.8125rem)] tracking-[0.2em] text-cyan-500/60 group-hover:text-cyan-400 transition-colors">
-                  <span>进入系统 ENTER SYSTEM</span>
+                  <span>ENTER SYSTEM</span>
                   <ChevronRight size={14} />
                 </div>
               </div>
@@ -740,7 +729,7 @@ export default function HomePage() {
 
           {/* Section 3: Mission Timeline */}
           <section className="p-[3vw] space-y-12 bg-cyan-500/[0.02] border-y border-cyan-500/10">
-            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">任务时间线 · MISSION TIMELINE</h3>
+            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">MISSION TIMELINE</h3>
             <div className="relative py-12">
               <div className="absolute top-1/2 left-0 w-full h-[1px] bg-cyan-500/30 -translate-y-1/2" />
               {/* Traveling dot with trail */}
@@ -751,29 +740,29 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="flex justify-between relative">
-                <TimelineNode year="2058" label="发动机点火" sub="IGNITION" status="past" />
-                <TimelineNode year="2061" label="离开太阳系" sub="SOLAR EXIT" status="past" />
+                <TimelineNode year="2058" label="ENGINE IGNITION" sub="IGNITION" status="past" />
+                <TimelineNode year="2061" label="SOLAR SYSTEM EXIT" sub="SOLAR EXIT" status="past" />
                 <TimelineNode year="NOW" label="YEAR 847" sub="CURRENT" status="active" />
-                <TimelineNode year="2500" label="接近比邻星" sub="APPROACH" status="future" />
-                <TimelineNode year="2650" label="抵达新家园" sub="ARRIVAL" status="future" />
+                <TimelineNode year="2500" label="PROXIMA APPROACH" sub="APPROACH" status="future" />
+                <TimelineNode year="2650" label="NEW HOME ARRIVAL" sub="ARRIVAL" status="future" />
               </div>
             </div>
           </section>
 
           {/* Section 3: Underground Status */}
           <section className="p-[3vw] space-y-8 bg-[#000d1a]">
-            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">地下城状态 · UNDERGROUND STATUS</h3>
+            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">UNDERGROUND STATUS</h3>
             <div className="space-y-6">
-              <StatusRow label="地表层 SURFACE" info="-272°C · 引擎运行中" progress={60} tag="⚠ UNINHABITABLE" tagColor="#ef4444" />
-              <StatusRow label="居住层 HABITAT" info="18°C · 人口 3.5亿" progress={100} tag={`👥 ${habitatPop.toFixed(3)}B`} tagColor="#00ff88" />
-              <StatusRow label="工业层 INDUSTRY" info="24°C · 能源输出 98%" progress={98} tag={`⚡ ${tickerStats.engine}%`} tagColor="#ffaa00" />
-              <StatusRow label="地核层 CORE" info="5500°C · 反应堆稳定" progress={100} tag={`🌡 5,${coreTemp}°C`} tagColor="#ff6644" />
+              <StatusRow label="SURFACE" info="-272°C · engines running" progress={60} tag="⚠ UNINHABITABLE" tagColor="#ef4444" />
+              <StatusRow label="HABITAT" info="18°C · pop 3.5B" progress={100} tag={`👥 ${habitatPop.toFixed(3)}B`} tagColor="#00ff88" />
+              <StatusRow label="INDUSTRY" info="24°C · power output 98%" progress={98} tag={`⚡ ${tickerStats.engine}%`} tagColor="#ffaa00" />
+              <StatusRow label="CORE" info="5500°C · reactor stable" progress={100} tag={`🌡 5,${coreTemp}°C`} tagColor="#ff6644" />
             </div>
           </section>
 
           {/* Section 4: Engine Output */}
           <section className="p-[3vw] space-y-8 bg-cyan-500/[0.02] border-y border-cyan-500/10">
-            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">── ENGINE OUTPUT · 发动机输出 ──</h3>
+            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">── ENGINE OUTPUT ──</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-[3vw]">
               <div className="space-y-6">
                 {engineGroups.map((val, i) => (
@@ -824,31 +813,31 @@ export default function HomePage() {
 
           {/* Section 5: Crew Duty */}
           <section className="p-[3vw] space-y-8 bg-[#000d1a]">
-            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">── ON DUTY · 值班状态 ──</h3>
+            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">── ON DUTY ──</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <CrewCard name="CHEN_WEI" role="结构工程师" status="AWAKE" />
-              <CrewCard name="YANOV_K" role="核工程师" status="DORMANT" pod="023" />
-              <CrewCard name="SMITH_J" role="医疗官" status="DORMANT" pod="041" />
-              <CrewCard name="ZHANG_LI" role="生命支持" status="DORMANT" pod="011" />
-              <CrewCard name="GARCIA_M" role="系统工程师" status="DORMANT" pod="067" />
-              <CrewCard name="KIM_S" role="导航官" status="AWAKE" />
+              <CrewCard name="CHEN_WEI" role="Structural Engineer" status="AWAKE" />
+              <CrewCard name="YANOV_K" role="Nuclear Engineer" status="DORMANT" pod="023" />
+              <CrewCard name="SMITH_J" role="Medical Officer" status="DORMANT" pod="041" />
+              <CrewCard name="ZHANG_LI" role="Life Support" status="DORMANT" pod="011" />
+              <CrewCard name="GARCIA_M" role="Systems Engineer" status="DORMANT" pod="067" />
+              <CrewCard name="KIM_S" role="Navigation" status="AWAKE" />
             </div>
           </section>
 
           {/* Section 6: Recent Events + System Pulse */}
           <section className="p-[3vw] space-y-8 bg-[#000d1a]">
-            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">近期事件 · RECENT EVENTS</h3>
+            <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">RECENT EVENTS</h3>
             <div className="grid grid-cols-[65%_35%] gap-6">
               <div className="border border-cyan-500/10 bg-[#000f1e]/50 p-6 space-y-4">
-                <EventItem time="2小时前" icon="🟡" text="AI推理引擎触发 · 氧气舱A-7轻微异常 · 已处理" />
-                <EventItem time="6小时前" icon="🟢" text="机组轮换完成 · ZHANG_LI进入休眠 · CHEN_WEI唤醒" />
-                <EventItem time="1天前" icon="🟢" text="引擎组E-7例行维护完成" />
-                <EventItem time="3天前" icon="🔴" text="辐射读数异常 · 已由工程师修复" />
-                <EventItem time="7天前" icon="🟢" text="系统全面检查通过" />
+                <EventItem time="2H AGO" icon="🟡" text="AI engine: minor O₂ bay A-7 anomaly · cleared" />
+                <EventItem time="6H AGO" icon="🟢" text="Crew rotation: ZHANG_LI to hibernation · CHEN_WEI awake" />
+                <EventItem time="1 DAY AGO" icon="🟢" text="Engine group E-7 maintenance complete" />
+                <EventItem time="3 DAYS AGO" icon="🔴" text="Radiation spike · repaired by engineering" />
+                <EventItem time="7 DAYS AGO" icon="🟢" text="Full system inspection passed" />
               </div>
               <div className="border border-cyan-500/10 bg-[rgba(0,0,0,0.4)] flex flex-col overflow-hidden">
                 <div className="p-3 border-b border-cyan-500/10 text-[clamp(0.5625rem,0.625vw,0.8125rem)] font-bold tracking-[0.2em] text-cyan-500/40 text-center">
-                  ── SYSTEM PULSE · 系统脉冲 ──
+                  ── SYSTEM PULSE ──
                 </div>
                 <div className="flex-1 min-h-[180px] relative">
                   <canvas ref={pulseCanvasRef} className="absolute inset-0 w-full h-full" />
@@ -863,10 +852,10 @@ export default function HomePage() {
           {/* Footer */}
           <footer className="p-[3vw] border-t border-cyan-500/10 bg-[#000d1a] text-center space-y-4">
             <div className="text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-[0.4em] opacity-40">
-              AEONGUARD · 永卫系统 · 联合地球政府 · 地球发动机管理局
+              AEONGUARD · UEG · PLANETARY ENGINE ADMINISTRATION
             </div>
             <div className="text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-[0.2em] opacity-20">
-              流浪地球计划 · 第847年 · 保障全人类生存
+              Wandering Earth Project · Year 847 · Ensuring human survival
             </div>
           </footer>
         </main>

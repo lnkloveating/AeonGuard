@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAeonStore } from '../store/aeonStore';
+import { useOverrideBadge } from '../hooks/useOverrideBadge';
 import {
-  Terminal, Home, Database, AlertTriangle, Cpu, Zap, FileText, Users, ClipboardList, Settings, LogOut, RefreshCw, Languages, ChevronLeft, ChevronRight
+  Terminal, Home, Database, AlertTriangle, Cpu, Zap, FileText, Users, ClipboardList, Settings, LogOut, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer
@@ -18,154 +19,151 @@ const crisisScenarios = [
 const reasoningScripts: Record<string, string[]> = {
   oxygen: [
     '══════════════════════════════════════════',
-    '  CRISIS ALERT RECEIVED',
+    '  CRISIS-警报 RECEIVED · SYS-alert triggered',
     '══════════════════════════════════════════',
-    '> TYPE: OXYGEN DEPLETION · SEVERITY: CRITICAL',
-    '> LOCATION: SECTOR B1-R2 · RESIDENTIAL ZONE B',
-    '> CURRENT O₂ LEVEL: 71.3% · THRESHOLD: 78.0%',
-    '> TIME TO CRITICAL FAILURE: 01:30:00',
+    '> TYPE: O₂-气体 DEPLETION · SEVERITY-等级: CRITICAL-危急',
+    '> LOCATION-位置: SECTOR B1-R2 · 居住区B',
+    '> O₂-气体 LEVEL-水平: 71.3% · THRESHOLD-阈值: 78.0%',
+    '> TIME-时间 TO CRITICAL-危急 FAILURE: 01:30:00',
     '',
-    '> INITIATING EMERGENCY SPECIALIST SCAN...',
-    '> SCANNING 127 HIBERNATION PODS...',
+    '> INITIATING EMERGENCY-紧急 SPECIALIST-专家 SCAN-扫描...',
+    '> SCANNING-扫描 127 CRYO-舱位...',
     '> ████████████████████████████████ 100%',
     '',
     '══════════════════════════════════════════',
-    '  STEP 1: CRISIS TYPE IDENTIFICATION',
+    '  STEP 1: CRISIS-危机 TYPE-类型 IDENTIFICATION-识别',
     '══════════════════════════════════════════',
-    '> ANALYZING CRISIS PARAMETERS...',
-    '> REQUIRED EXPERTISE:',
-    '>   · LIFE SUPPORT ENGINEERING (PRIMARY)',
-    '>   · STRUCTURAL ENGINEERING (SECONDARY)',
-    '>   · MEDICAL OFFICER (SUPPORT)',
+    '> ANALYZING-分析 CRISIS-危机 PARAMETERS-参数...',
+    '> REQUIRED-需求 EXPERTISE-专长:',
+    '>   · LIFE-SUPPORT-生命支持 ENGINEERING (PRIMARY-主要)',
+    '>   · STRUCTURAL-结构 ENGINEERING (SECONDARY-次要)',
+    '>   · MEDICAL-医疗 OFFICER-官员 (SUPPORT-支援)',
     '',
     '══════════════════════════════════════════',
-    '  STEP 2: SKILL MATCHING',
+    '  STEP 2: SKILL-技能 MATCHING-匹配',
     '══════════════════════════════════════════',
-    '> SEARCHING SPECIALIST DATABASE...',
-    '> LIFE SUPPORT ENGINEERS FOUND: 14',
-    '> STRUCTURAL ENGINEERS FOUND: 18',
-    '> MEDICAL OFFICERS FOUND: 12',
-    '> TOTAL CANDIDATES: 44',
+    '> SEARCHING-搜索 SPECIALIST-专家 DATABASE-数据库...',
+    '> LIFE-SUPPORT-生命支持 ENGINEERS-工程师 FOUND-找到: 14',
+    '> STRUCTURAL-结构 ENGINEERS-工程师 FOUND-找到: 18',
+    '> MEDICAL-医疗 OFFICERS-官员 FOUND-找到: 12',
+    '> TOTAL-总计 CANDIDATES-候选: 44',
     '',
     '══════════════════════════════════════════',
-    '  STEP 3: THREE-DIMENSION EVALUATION',
+    '  STEP 3: THREE-三维 DIMENSION-维度 EVALUATION-评估',
     '══════════════════════════════════════════',
-    '> DIMENSION 1: BIOLOGICAL HEALTH ASSESSMENT',
-    '>   CHEN_WEI    ♥52 BPM  36.1°C  18% META  → BIO-SCORE: 94',
-    '>   SMITH_J     ♥48 BPM  35.8°C  16% META  → BIO-SCORE: 88',
-    '>   ZHANG_LI    ♥55 BPM  36.5°C  21% META  → BIO-SCORE: 76',
-    '>   YANOV_K     ♥44 BPM  35.6°C  15% META  → BIO-SCORE: 91',
+    '> DIM-维度 1: BIO-生物 HEALTH-健康 ASSESSMENT-评估',
+    '>   CHEN_WEI  ♥52 BPM  36.1°C  18% META  → BIO-评分: 94',
+    '>   SMITH_J   ♥48 BPM  35.8°C  16% META  → BIO-评分: 88',
+    '>   ZHANG_LI  ♥55 BPM  36.5°C  21% META  → BIO-评分: 76',
+    '>   YANOV_K   ♥44 BPM  35.6°C  15% META  → BIO-评分: 91',
     '',
-    '> DIMENSION 2: SKILL MATCH ASSESSMENT',
-    '>   CHEN_WEI    LIFE SUPPORT · 12YR EXP    → SKILL-SCORE: 98 ★',
-    '>   SMITH_J     LIFE SUPPORT · 8YR EXP     → SKILL-SCORE: 91',
-    '>   ZHANG_LI    STRUCTURAL   · 15YR EXP    → SKILL-SCORE: 85',
-    '>   YANOV_K     LIFE SUPPORT · 10YR EXP    → SKILL-SCORE: 93',
+    '> DIM-维度 2: SKILL-技能 MATCH-匹配 ASSESSMENT-评估',
+    '>   CHEN_WEI  LIFE-SUPPORT-生命支持 · 12YR EXP  → SKILL-匹配度: 98 ★',
+    '>   SMITH_J   LIFE-SUPPORT-生命支持 · 8YR EXP   → SKILL-匹配度: 91',
+    '>   ZHANG_LI  STRUCTURAL-结构 · 15YR EXP        → SKILL-匹配度: 85',
+    '>   YANOV_K   LIFE-SUPPORT-生命支持 · 10YR EXP  → SKILL-匹配度: 93',
     '',
-    '> DIMENSION 3: NATIONAL ROTATION EQUITY',
-    '>   CHECKING ROTATION HISTORY...',
-    '>   CHEN_WEI  [CN]  LAST ACTIVE: 47 DAYS AGO  → EQUITY: 87',
-    '>   SMITH_J   [US]  LAST ACTIVE: 23 DAYS AGO  → EQUITY: 76',
-    '>   ZHANG_LI  [CN]  LAST ACTIVE: 12 DAYS AGO  → EQUITY: 65',
-    '>   YANOV_K   [RU]  LAST ACTIVE: 89 DAYS AGO  → EQUITY: 95',
-    '',
-    '══════════════════════════════════════════',
-    '  STEP 4: COMPOSITE SCORING',
-    '══════════════════════════════════════════',
-    '> CALCULATING WEIGHTED SCORES...',
-    '>   BIO(35%) + SKILL(40%) + EQUITY(25%)',
-    '',
-    '>   CHEN_WEI  94×0.35 + 98×0.40 + 87×0.25 = 93.6  ★ RANK #1',
-    '>   YANOV_K   91×0.35 + 93×0.40 + 95×0.25 = 92.5    RANK #2',
-    '>   SMITH_J   88×0.35 + 91×0.40 + 76×0.25 = 86.4    RANK #3',
-    '>   ZHANG_LI  76×0.35 + 85×0.40 + 65×0.25 = 77.8    RANK #4',
+    '> DIM-维度 3: NATIONAL-国家 ROTATION-轮换 EQUITY-公平',
+    '>   CHECKING-检查 ROTATION-轮换 HISTORY-历史...',
+    '>   CHEN_WEI  [CN]  LAST-上次 ACTIVE-活跃: 47 DAYS-天 AGO  → EQUITY-公平指数: 87',
+    '>   SMITH_J   [US]  LAST-上次 ACTIVE-活跃: 23 DAYS-天 AGO  → EQUITY-公平指数: 76',
+    '>   ZHANG_LI  [CN]  LAST-上次 ACTIVE-活跃: 12 DAYS-天 AGO  → EQUITY-公平指数: 65',
+    '>   YANOV_K   [RU]  LAST-上次 ACTIVE-活跃: 89 DAYS-天 AGO  → EQUITY-公平指数: 95',
     '',
     '══════════════════════════════════════════',
-    '  STEP 5: FINAL RECOMMENDATION',
+    '  STEP 4: COMPOSITE-综合 SCORING-评分',
+    '══════════════════════════════════════════',
+    '> CALCULATING-计算 WEIGHTED-加权 SCORES-分数...',
+    '>   BIO-生物(35%) + SKILL-技能(40%) + EQUITY-公平(25%)',
+    '',
+    '>   CHEN_WEI  94×0.35 + 98×0.40 + 87×0.25 = 93.6  ★ RANK-排名 #1',
+    '>   YANOV_K   91×0.35 + 93×0.40 + 95×0.25 = 92.5    RANK-排名 #2',
+    '>   SMITH_J   88×0.35 + 91×0.40 + 76×0.25 = 86.4    RANK-排名 #3',
+    '>   ZHANG_LI  76×0.35 + 85×0.40 + 65×0.25 = 77.8    RANK-排名 #4',
+    '',
+    '══════════════════════════════════════════',
+    '  STEP 5: FINAL-最终 RECOMMENDATION-推荐',
     '══════════════════════════════════════════',
     '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED: CHEN_WEI · POD-047   │',
-    '> │  COMPOSITE SCORE: 93.6 / 100       │',
-    '> │  ROLE: LIFE SUPPORT ENGINEER       │',
-    '> │  STATUS: DORMANT · READY FOR WAKE  │',
+    '> │  RECOMMENDED-推荐: CHEN_WEI · CRYO-047   │',
+    '> │  COMPOSITE-综合 SCORE-评分: 93.6 / 100    │',
+    '> │  ROLE-职位: LIFE-SUPPORT-生命支持 ENG     │',
+    '> │  STATUS-状态: DORMANT-休眠 · READY-就绪   │',
     '> └─────────────────────────────────────┘',
     '',
-    '> ANALYSIS COMPLETE',
-    '> FORWARDING TO HUMAN OVERRIDE PANEL...',
-    '> ► DECISION QUEUE UPDATED [+1 PENDING]',
-    '> AWAITING HUMAN AUTHORIZATION...',
+    '> ANALYSIS-分析 COMPLETE-完成',
+    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策 PANEL-面板...',
+    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
+    '> AWAITING-等待 HUMAN-人工 AUTHORIZATION-授权...',
     '> _',
   ],
   radiation: [
-    '══════════════════════════════════════════',
-    '  CRISIS ALERT RECEIVED',
-    '══════════════════════════════════════════',
-    '> TYPE: RADIATION SURGE · SEVERITY: WARNING',
-    '> LOCATION: SECTOR B3-E1 · ENERGY ZONE A',
-    '> CURRENT RAD: 89.3 mSv · THRESHOLD: 100 mSv',
+    '> TYPE: RAD-辐射 SURGE-激增 · SEVERITY-等级: WARNING-警告',
+    '> LOCATION-位置: SECTOR B3-E1 · 能源区A',
+    '> RAD-辐射 LEVEL-水平: 89.3 mSv · THRESHOLD-阈值: 100 mSv',
     '',
-    '> INITIATING SPECIALIST SCAN...',
-    '> SCANNING 127 HIBERNATION PODS...',
+    '> INITIATING-启动 SPECIALIST-专家 SCAN-扫描...',
+    '> SCANNING-扫描 127 CRYO-舱位...',
     '> ████████████████████████████████ 100%',
     '',
-    '> REQUIRED EXPERTISE: NUCLEAR ENGINEER · RADIATION SPECIALIST',
+    '> REQUIRED-需求 EXPERTISE-专长: NUCLEAR-核能 ENG · RAD-辐射 SPECIALIST-专家',
     '',
-    '> DIMENSION 1: BIO ASSESSMENT',
-    '>   YANOV_K     ♥44 BPM  35.6°C  → BIO-SCORE: 91',
-    '>   MÜLLER_H    ♥47 BPM  36.0°C  → BIO-SCORE: 89',
+    '> DIM-维度 1: BIO-生物 ASSESSMENT-评估',
+    '>   YANOV_K   ♥44 BPM  35.6°C  → BIO-评分: 91',
+    '>   MÜLLER_H  ♥47 BPM  36.0°C  → BIO-评分: 89',
     '',
-    '> DIMENSION 2: SKILL MATCH',
-    '>   YANOV_K     NUCLEAR ENG · 15YR EXP  → SKILL-SCORE: 97 ★',
-    '>   MÜLLER_H    GEOLOGY     · 11YR EXP  → SKILL-SCORE: 82',
+    '> DIM-维度 2: SKILL-技能 MATCH-匹配',
+    '>   YANOV_K   NUCLEAR-核能 ENG · 15YR EXP  → SKILL-匹配度: 97 ★',
+    '>   MÜLLER_H  GEOLOGY-地质 · 11YR EXP      → SKILL-匹配度: 82',
     '',
-    '> DIMENSION 3: EQUITY CHECK',
-    '>   YANOV_K   [RU]  LAST: 89 DAYS  → EQUITY: 95',
-    '>   MÜLLER_H  [DE]  LAST: 34 DAYS  → EQUITY: 78',
+    '> DIM-维度 3: EQUITY-公平 CHECK-检查',
+    '>   YANOV_K   [RU]  LAST-上次: 89 DAYS-天  → EQUITY-公平指数: 95',
+    '>   MÜLLER_H  [DE]  LAST-上次: 34 DAYS-天  → EQUITY-公平指数: 78',
     '',
-    '> FINAL SCORE:',
-    '>   YANOV_K   91×0.35+97×0.40+95×0.25 = 94.4  ★ RANK #1',
-    '>   MÜLLER_H  89×0.35+82×0.40+78×0.25 = 83.6    RANK #2',
+    '> FINAL-最终 SCORE-评分:',
+    '>   YANOV_K   91×0.35+97×0.40+95×0.25 = 94.4  ★ RANK-排名 #1',
+    '>   MÜLLER_H  89×0.35+82×0.40+78×0.25 = 83.6    RANK-排名 #2',
     '',
     '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED: YANOV_K · POD-023    │',
-    '> │  COMPOSITE SCORE: 94.4 / 100       │',
+    '> │  RECOMMENDED-推荐: YANOV_K · CRYO-023     │',
+    '> │  COMPOSITE-综合 SCORE-评分: 94.4 / 100    │',
     '> └─────────────────────────────────────┘',
-    '> FORWARDING TO HUMAN OVERRIDE PANEL...',
-    '> ► DECISION QUEUE UPDATED [+1 PENDING]',
+    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
+    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
     '> _',
   ],
   power: [
-    '> TYPE: POWER SYSTEM FAILURE · SEVERITY: CRITICAL',
-    '> LOCATION: SECTOR B3-E2',
-    '> REQUIRED: SYSTEMS ENGINEER · ELECTRICAL SPECIALIST',
+    '> TYPE: PWR-电力 SYSTEM-系统 FAILURE-故障 · SEVERITY-等级: CRITICAL-危急',
+    '> LOCATION-位置: SECTOR B3-E2 · 能源区B',
+    '> REQUIRED-需求: SYSTEMS-系统 ENG · ELECTRICAL-电气 SPECIALIST-专家',
     '',
-    '> SCANNING CANDIDATES...',
-    '>   GARCIA_M  SYSTEMS ENG  BIO:85  SKILL:94  EQ:82  → 87.8 ★',
-    '>   KIM_S     NAVIGATION   BIO:91  SKILL:78  EQ:88  → 85.3',
+    '> SCANNING-扫描 CRYO-舱位...',
+    '>   GARCIA_M  SYSTEMS-系统 ENG  BIO-评分:85  SKILL-匹配:94  EQUITY-公平:82  → 87.8 ★',
+    '>   KIM_S     NAV-导航 OFFICER  BIO-评分:91  SKILL-匹配:78  EQUITY-公平:88  → 85.3',
     '',
     '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED: GARCIA_M · POD-067   │',
-    '> │  COMPOSITE SCORE: 87.8 / 100       │',
+    '> │  RECOMMENDED-推荐: GARCIA_M · CRYO-067    │',
+    '> │  COMPOSITE-综合 SCORE-评分: 87.8 / 100    │',
     '> └─────────────────────────────────────┘',
-    '> FORWARDING TO HUMAN OVERRIDE PANEL...',
-    '> ► DECISION QUEUE UPDATED [+1 PENDING]',
+    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
+    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
     '> _',
   ],
   pressure: [
-    '> TYPE: PRESSURE ANOMALY · SEVERITY: WARNING',
-    '> LOCATION: SECTOR B2-I1',
-    '> REQUIRED: STRUCTURAL ENGINEER',
+    '> TYPE: PRS-气压 ANOMALY-异常 · SEVERITY-等级: WARNING-警告',
+    '> LOCATION-位置: SECTOR B2-I1 · 工业区A',
+    '> REQUIRED-需求: STRUCTURAL-结构 ENGINEER-工程师',
     '',
-    '> SCANNING CANDIDATES...',
-    '>   SMITH_J    STRUCTURAL   BIO:92  SKILL:95  EQ:88  → 91.5 ★',
-    '>   CHEN_WEI   LIFE SUPPORT BIO:88  SKILL:79  EQ:76  → 81.4',
+    '> SCANNING-扫描 CRYO-舱位...',
+    '>   SMITH_J   STRUCTURAL-结构  BIO-评分:88  SKILL-匹配:96  EQUITY-公平:91  → 92.8 ★',
+    '>   CHEN_WEI  LIFE-SUPPORT-生命支持  BIO-评分:94  SKILL-匹配:79  EQUITY-公平:76  → 81.4',
     '',
     '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED: SMITH_J · POD-041    │',
-    '> │  COMPOSITE SCORE: 91.5 / 100       │',
+    '> │  RECOMMENDED-推荐: SMITH_J · CRYO-041     │',
+    '> │  COMPOSITE-综合 SCORE-评分: 92.8 / 100    │',
     '> └─────────────────────────────────────┘',
-    '> FORWARDING TO HUMAN OVERRIDE PANEL...',
-    '> ► DECISION QUEUE UPDATED [+1 PENDING]',
+    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
+    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
     '> _',
   ],
 };
@@ -174,28 +172,28 @@ const historyData = [
   { time: '2H AGO',  crisis: 'OXYGEN DEPLETION',    recommended: 'CHEN_WEI',  score: 93.6, action: 'ACCEPTED' },
   { time: '6H AGO',  crisis: 'RADIATION SURGE',     recommended: 'YANOV_K',   score: 94.4, action: 'ACCEPTED' },
   { time: '1D AGO',  crisis: 'POWER FAILURE',       recommended: 'GARCIA_M',  score: 87.8, action: 'OVERRIDDEN' },
-  { time: '3D AGO',  crisis: 'PRESSURE ANOMALY',    recommended: 'CHEN_WEI',  score: 92.8, action: 'ACCEPTED' },
+  { time: '3D AGO',  crisis: 'PRESSURE ANOMALY',    recommended: 'SMITH_J',   score: 92.8, action: 'ACCEPTED' },
   { time: '7D AGO',  crisis: 'OXYGEN DEPLETION',    recommended: 'SMITH_J',   score: 86.4, action: 'ACCEPTED' },
 ];
 
 const candidateMaps: Record<string, any[]> = {
   oxygen: [
-    { name: 'CHEN_WEI', role: 'LIFE SUPPORT ENGINEER', pod: 'POD-047', bio: 94, skill: 98, equity: 87, score: 93.6, rank: 1 },
-    { name: 'YANOV_K',  role: 'LIFE SUPPORT ENGINEER', pod: 'POD-023', bio: 91, skill: 93, equity: 95, score: 92.5, rank: 2 },
-    { name: 'SMITH_J',  role: 'LIFE SUPPORT ENGINEER', pod: 'POD-112', bio: 88, skill: 91, equity: 76, score: 86.4, rank: 3 },
-    { name: 'ZHANG_LI', role: 'STRUCTURAL ENGINEER',   pod: 'POD-088', bio: 76, skill: 85, equity: 65, score: 77.8, rank: 4 },
+    { name: 'CHEN_WEI', role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-047', bio: 94, skill: 98, equity: 87, score: 93.6, rank: 1 },
+    { name: 'YANOV_K',  role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-023', bio: 91, skill: 93, equity: 95, score: 92.5, rank: 2 },
+    { name: 'SMITH_J',  role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-112', bio: 88, skill: 91, equity: 76, score: 86.4, rank: 3 },
+    { name: 'ZHANG_LI', role: 'STRUCTURAL ENGINEER',   pod: 'CRYO-088', bio: 76, skill: 85, equity: 65, score: 77.8, rank: 4 },
   ],
   radiation: [
-    { name: 'YANOV_K',  role: 'NUCLEAR ENGINEER', pod: 'POD-023', bio: 91, skill: 97, equity: 95, score: 94.4, rank: 1 },
-    { name: 'MÜLLER_H', role: 'GEOLOGY',          pod: 'POD-055', bio: 89, skill: 82, equity: 78, score: 83.6, rank: 2 },
+    { name: 'YANOV_K',  role: 'NUCLEAR ENGINEER', pod: 'CRYO-023', bio: 91, skill: 97, equity: 95, score: 94.4, rank: 1 },
+    { name: 'MÜLLER_H', role: 'GEOLOGY',          pod: 'CRYO-055', bio: 89, skill: 82, equity: 78, score: 83.6, rank: 2 },
   ],
   power: [
-    { name: 'GARCIA_M', role: 'SYSTEMS ENGINEER', pod: 'POD-067', bio: 85, skill: 94, equity: 82, score: 87.8, rank: 1 },
-    { name: 'KIM_S',    role: 'NAVIGATION',       pod: 'POD-034', bio: 91, skill: 78, equity: 88, score: 85.3, rank: 2 },
+    { name: 'GARCIA_M', role: 'SYSTEMS ENGINEER', pod: 'CRYO-067', bio: 85, skill: 94, equity: 82, score: 87.8, rank: 1 },
+    { name: 'KIM_S',    role: 'NAVIGATION',       pod: 'CRYO-034', bio: 91, skill: 78, equity: 88, score: 85.3, rank: 2 },
   ],
   pressure: [
-    { name: 'SMITH_J',  role: 'STRUCTURAL ENGINEER', pod: 'POD-041', bio: 92, skill: 95, equity: 88, score: 91.5, rank: 1 },
-    { name: 'CHEN_WEI', role: 'LIFE SUPPORT ENGINEER', pod: 'POD-047', bio: 88, skill: 79, equity: 76, score: 81.4, rank: 2 },
+    { name: 'SMITH_J',  role: 'STRUCTURAL ENGINEER', pod: 'CRYO-041', bio: 88, skill: 96, equity: 91, score: 92.8, rank: 1 },
+    { name: 'CHEN_WEI', role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-047', bio: 94, skill: 79, equity: 76, score: 81.4, rank: 2 },
   ]
 };
 
@@ -228,15 +226,27 @@ export default function AIEnginePage() {
   );
 }
 
+const personMap: Record<string, { person: string; pod: string; role: string; score: number }> = {
+  oxygen: { person: 'CHEN_WEI', pod: 'CRYO-047', role: '生命支持工程师', score: 93.6 },
+  radiation: { person: 'YANOV_K', pod: 'CRYO-023', role: '核工程师', score: 94.4 },
+  power: { person: 'GARCIA_M', pod: 'CRYO-067', role: '系统工程师', score: 87.8 },
+  pressure: { person: 'SMITH_J', pod: 'CRYO-041', role: '结构工程师', score: 92.8 },
+};
+
 function AIEnginePageContent() {
-  const { addDecision, pendingDecisions } = useAeonStore();
-  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
+  const { addDecision } = useAeonStore();
+  const overrideBadge = useOverrideBadge();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const [pendingCount, setPendingCount] = useState(() => {
+    const n = parseInt(localStorage.getItem('pendingDecisionCount') || '0', 10);
+    return Number.isNaN(n) ? 0 : n;
+  });
   
   const [displayedTitle, setDisplayedTitle] = useState('');
   const [titleDone, setTitleDone] = useState(false);
-  const fullTitle = 'AI推理引擎 · AI REASONING ENGINE';
+  const fullTitle = 'AI REASONING ENGINE';
 
   const [activeCrisisId, setActiveCrisisId] = useState<string | null>(null);
   const [displayedLines, setDisplayedLines] = useState<string[]>([]);
@@ -244,9 +254,6 @@ function AIEnginePageContent() {
   const [currentStep, setCurrentStep] = useState(0);
   const terminalRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  const langLabels: Record<string, string> = { zh: '中文', en: 'ENG', mixed: '混合' };
-  const currentLang = localStorage.getItem('lang') || 'zh';
 
   useEffect(() => {
     let i = 0;
@@ -259,6 +266,22 @@ function AIEnginePageContent() {
       }
     }, 60);
     return () => clearInterval(iv);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const n = parseInt(localStorage.getItem('pendingDecisionCount') || '0', 10);
+      setPendingCount(Number.isNaN(n) ? 0 : n);
+    };
+    sync();
+    window.addEventListener('aeonguard:pendingDecisionCount', sync);
+    window.addEventListener('storage', sync);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('aeonguard:pendingDecisionCount', sync);
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', sync);
+    };
   }, []);
 
   const startReasoning = (crisisId: string) => {
@@ -277,25 +300,47 @@ function AIEnginePageContent() {
       if (cancelled || cancelRef.current) return;
       if (lineIndex >= script.length) {
         setIsTyping(false);
+        const activeCrisis = crisisScenarios.find(c => c.id === crisisId);
         const topCandidate = candidateMaps[crisisId]?.[0];
-        if (topCandidate) {
+        const pm = personMap[crisisId];
+        if (activeCrisis && topCandidate) {
+          const recommendedPerson = pm?.person ?? topCandidate.name;
+          const recommendedPod = pm?.pod ?? topCandidate.pod;
+          const role = pm?.role ?? topCandidate.role;
+          const score = pm?.score ?? topCandidate.score;
+
           addDecision({
             crisisId: crisisId,
-            recommendedPod: topCandidate.pod,
-            recommendedPerson: topCandidate.name,
-            score: topCandidate.score,
-            reason: `Composite Score: ${topCandidate.score}`,
+            recommendedPod,
+            recommendedPerson,
+            score,
+            reason: `Composite Score: ${score}`,
           });
 
-          const podRecommendations: Record<string, string> = {
-            oxygen: 'POD-047',
-            radiation: 'POD-023',
-            power: 'POD-067',
-            pressure: 'POD-041',
+          const decisionData = {
+            id: `DEC-${Date.now()}`,
+            crisisType: activeCrisis.id,
+            crisisLabel: activeCrisis.label,
+            location: activeCrisis.location,
+            recommendedPerson,
+            recommendedPod,
+            role,
+            score,
+            status: 'PENDING' as const,
+            triggeredAt: new Date().toISOString(),
           };
-          const podId = podRecommendations[crisisId];
-          if (podId) {
-            localStorage.setItem(`podOverride_${podId}`, 'WAKING');
+          try {
+            const existing = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as unknown[];
+            const list = Array.isArray(existing) ? existing : [];
+            list.unshift(decisionData);
+            localStorage.setItem('pendingDecisions', JSON.stringify(list));
+            localStorage.setItem(
+              'pendingDecisionCount',
+              String(list.filter((d: { status?: string }) => d.status === 'PENDING').length)
+            );
+            window.dispatchEvent(new Event('aeonguard:pendingDecisionCount'));
+          } catch {
+            /* noop */
           }
         }
         return;
@@ -337,13 +382,6 @@ function AIEnginePageContent() {
     localStorage.removeItem('aeonguard_auth');
     navigate('/');
   };
-  const cycleLanguage = () => {
-    const langs = ['zh', 'en', 'mixed'];
-    const nextLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
-    localStorage.setItem('lang', nextLang);
-    window.location.reload();
-  };
-
   const cancelRef = useRef<boolean>(false);
 
   useEffect(() => {
@@ -437,7 +475,7 @@ function AIEnginePageContent() {
       <nav className="fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-cyan-500/30 bg-[#000d1a]/80 px-4 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
         <div className="flex items-center gap-2 font-bold tracking-[0.2em]">
           <Terminal size={18} className="text-cyan-400" />
-          <span>AEONGUARD · 永卫系统</span>
+          <span>AEONGUARD</span>
         </div>
         <div className="flex-1 overflow-hidden mx-8 border-x border-cyan-500/10">
           <div className="animate-[ticker_60s_linear_infinite] whitespace-nowrap text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-widest text-cyan-500/80">
@@ -455,10 +493,6 @@ function AIEnginePageContent() {
           <div className="flex items-center gap-2 mr-2">
             <button onClick={() => window.location.reload()} className="p-1.5 border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors text-cyan-400/60 hover:text-cyan-400">
               <RefreshCw size={14} />
-            </button>
-            <button onClick={cycleLanguage} className="flex items-center gap-2 px-3 py-1 border border-cyan-400/50 bg-cyan-400/5 text-cyan-400 hover:bg-cyan-400/10 transition-all">
-              <Languages size={14} />
-              <span>{langLabels[currentLang]}</span>
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -488,26 +522,26 @@ function AIEnginePageContent() {
           </div>
           <div className={`flex flex-col gap-4 ${sidebarOpen ? '' : 'mt-6'}`}>
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">核心系统 CORE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">CORE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="主页 HOME" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" active collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="HOME" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="POD MONITORING" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="HABITAT ALERT" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI ENGINE" active collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="HUMAN OVERRIDE" badge={overrideBadge} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">档案 ARCHIVE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">ARCHIVE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="任务档案 MISSION" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="机组名单 CREW" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="系统日志 SYSLOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="MISSION LOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="CREW ROSTER" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="SYSTEM LOG" collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
-            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="设置 SETTINGS" collapsed={!sidebarOpen} />
+            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="SETTINGS" collapsed={!sidebarOpen} />
           </div>
         </aside>
 
@@ -641,7 +675,7 @@ function AIEnginePageContent() {
             {analysisComplete && activeCandidates.length > 0 && (
               <div className="p-6 border-b border-cyan-500/10 fade-in">
                 <div className="text-[clamp(0.8rem,0.9vw,1rem)] font-bold tracking-[0.3em] text-[#6464ff] mb-6">
-                  ── 推荐唤醒名单 · RECOMMENDED WAKE LIST ──
+                  ── RECOMMENDED WAKE LIST ──
                 </div>
                 <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
                   {activeCandidates.map((c) => (
@@ -713,7 +747,7 @@ function AIEnginePageContent() {
               {/* Section B */}
               <div className="w-[60%] border border-cyan-500/20 bg-black/30 p-4">
                 <div className="text-[clamp(0.7rem,0.8vw,0.9rem)] font-bold tracking-[0.2em] text-[#6464ff] mb-4">
-                  ── REASONING HISTORY · 历史记录 ──
+                  ── REASONING HISTORY ──
                 </div>
                 <div className="space-y-2">
                   {historyData.map((h, i) => (
@@ -735,7 +769,7 @@ function AIEnginePageContent() {
               {/* Section C */}
               <div className="w-[40%] flex flex-col gap-4">
                 <div className="text-[clamp(0.7rem,0.8vw,0.9rem)] font-bold tracking-[0.2em] text-[#6464ff] mb-0">
-                  ── ENGINE STATISTICS · 系统统计 ──
+                  ── ENGINE STATISTICS ──
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="border border-cyan-500/20 bg-black/30 p-4 flex flex-col justify-center items-center text-center">

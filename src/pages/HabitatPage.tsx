@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAeonStore } from '../store/aeonStore';
+import { useOverrideBadge } from '../hooks/useOverrideBadge';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -8,7 +9,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import {
   Terminal, Home, Database, AlertTriangle, Cpu, Zap, FileText,
   Users, ClipboardList, Settings, LogOut, RefreshCw,
-  ChevronLeft, ChevronRight, Languages,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, CartesianGrid, Tooltip, XAxis, YAxis, ReferenceLine,
@@ -22,24 +23,29 @@ type ZoneStatus = 'NOMINAL' | 'WARNING' | 'CRITICAL';
 interface Zone { id: string; label: string; type: string; status: ZoneStatus }
 interface AlertEvent { time: string; icon: string; text: string; color: string }
 
-const FLOOR_NAMES: Record<FloorId, string> = { B1: '居住层', B2: '工业层', B3: '能源层', B4: '核心层' };
+const FLOOR_NAMES: Record<FloorId, string> = {
+  B1: '居住层 RESIDENTIAL B1',
+  B2: '工业层 INDUSTRIAL B2',
+  B3: '能源层 ENERGY B3',
+  B4: '核心层 CORE B4',
+};
 
 const FLOOR_ZONES: Record<FloorId, Zone[]> = {
   B1: [
-    { id: 'B1-R1', label: '居民区 A', type: 'RESIDENTIAL', status: 'NOMINAL' },
-    { id: 'B1-R2', label: '居民区 B', type: 'RESIDENTIAL', status: 'WARNING' },
+    { id: 'B1-R1', label: 'Residential A', type: 'RESIDENTIAL', status: 'NOMINAL' },
+    { id: 'B1-R2', label: 'Residential B', type: 'RESIDENTIAL', status: 'WARNING' },
   ],
   B2: [
-    { id: 'B2-I1', label: '工业区 A', type: 'INDUSTRIAL', status: 'NOMINAL' },
-    { id: 'B2-I2', label: '工业区 B', type: 'INDUSTRIAL', status: 'NOMINAL' },
+    { id: 'B2-I1', label: 'Industrial A', type: 'INDUSTRIAL', status: 'NOMINAL' },
+    { id: 'B2-I2', label: 'Industrial B', type: 'INDUSTRIAL', status: 'NOMINAL' },
   ],
   B3: [
-    { id: 'B3-E1', label: '能源区 A', type: 'ENERGY', status: 'NOMINAL' },
-    { id: 'B3-E2', label: '能源区 B', type: 'ENERGY', status: 'NOMINAL' },
+    { id: 'B3-E1', label: 'Energy A', type: 'ENERGY', status: 'NOMINAL' },
+    { id: 'B3-E2', label: 'Energy B', type: 'ENERGY', status: 'NOMINAL' },
   ],
   B4: [
-    { id: 'B4-C1', label: '反应堆区 A', type: 'REACTOR', status: 'NOMINAL' },
-    { id: 'B4-C2', label: '反应堆区 B', type: 'REACTOR', status: 'NOMINAL' },
+    { id: 'B4-C1', label: 'Reactor A', type: 'REACTOR', status: 'NOMINAL' },
+    { id: 'B4-C2', label: 'Reactor B', type: 'REACTOR', status: 'NOMINAL' },
   ],
 };
 
@@ -406,10 +412,10 @@ const ZONE_GRID = [
 ];
 
 const ZONE_SHORT_LABELS: Record<string, string> = {
-  'B1-R1': '居民A', 'B1-R2': '居民B',
-  'B2-I1': '工业A', 'B2-I2': '工业B',
-  'B3-E1': '能源A', 'B3-E2': '能源B',
-  'B4-C1': '核心A', 'B4-C2': '核心B',
+  'B1-R1': 'R-A', 'B1-R2': 'R-B',
+  'B2-I1': 'I-A', 'B2-I2': 'I-B',
+  'B3-E1': 'E-A', 'B3-E2': 'E-B',
+  'B4-C1': 'C-A', 'B4-C2': 'C-B',
 };
 
 function getHeatColor(value: number, min: number, max: number, safeMin: number, safeMax: number) {
@@ -563,10 +569,10 @@ function Habitat3DViewer({ activeFloor, selectedZone, zoneStatuses }: { activeFl
     // Models
     const loader = new GLTFLoader();
     const modelConfigs = [
-      { file: '/models/r1.glb', position: [-150, 0, 0], name: 'r1', zone: 'B1-R1', label: '居民区 A' },
-      { file: '/models/r2.glb', position: [150, 0, 0], name: 'r2', zone: 'B1-R2', label: '居民区 B' },
-      { file: '/models/i1.glb', position: [-150, 0, 0], name: 'i1', zone: 'B2-I1', label: '工业区 A' },
-      { file: '/models/i2.glb', position: [150, 0, 0], name: 'i2', zone: 'B2-I2', label: '工业区 B' },
+      { file: '/models/r1.glb', position: [-150, 0, 0], name: 'r1', zone: 'B1-R1', label: 'Residential A' },
+      { file: '/models/r2.glb', position: [150, 0, 0], name: 'r2', zone: 'B1-R2', label: 'Residential B' },
+      { file: '/models/i1.glb', position: [-150, 0, 0], name: 'i1', zone: 'B2-I1', label: 'Industrial A' },
+      { file: '/models/i2.glb', position: [150, 0, 0], name: 'i2', zone: 'B2-I2', label: 'Industrial B' },
     ];
 
     const modelsMap = new Map<string, THREE.Group>();
@@ -859,7 +865,7 @@ export default function HabitatPage() {
   // Typewriter title (same pattern as PodsPage)
   const [displayedTitle, setDisplayedTitle] = useState('');
   const [titleDone, setTitleDone] = useState(false);
-  const fullTitle = '环境警报系统 · HABITAT ALERT SYSTEM';
+  const fullTitle = 'HABITAT ALERT SYSTEM';
 
   const [activeFloor, setActiveFloor] = useState<FloorId>('B1');
   const [selectedZone, setSelectedZone] = useState<string>('B1-R1');
@@ -878,9 +884,11 @@ export default function HabitatPage() {
     { time: '6HR AGO', icon: '🟢', text: '能源层温度稳定', color: 'text-cyan-400/70' },
     { time: '1DAY AGO', icon: '🔴', text: 'B3-E1 辐射峰值事件 已修复', color: 'text-red-400/70' },
   ]);
-  const { triggerCrisis, resolveCrisis, activeCrisis, pendingDecisions } = useAeonStore();
-  const crisisActive = activeCrisis !== null;
-  const pendingCount = pendingDecisions.filter(d => d.status === 'PENDING').length;
+  const { triggerCrisis, resolveCrisis, activeCrisis } = useAeonStore();
+  /** Local flag so overlays update in the same commit as the click; store subscription alone can paint one frame late vs. sync audio. */
+  const [crisisActive, setCrisisActive] = useState(false);
+  const overrideBadge = useOverrideBadge();
+  const [overriddenWarning, setOverriddenWarning] = useState(false);
   const [crisisBanner, setCrisisBanner] = useState(false);
   const [crisisAcknowledged, setCrisisAcknowledged] = useState(false);
   const [currentCrisisType, setCurrentCrisisType] = useState<any>(null);
@@ -959,6 +967,7 @@ export default function HabitatPage() {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
     }
+    setCrisisActive(false);
     resolveCrisis();
     setCrisisBanner(false);
     setCrisisAcknowledged(false);
@@ -981,6 +990,49 @@ export default function HabitatPage() {
       if (audioCtxRef.current) audioCtxRef.current.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (activeCrisis === null) setCrisisActive(false);
+  }, [activeCrisis]);
+
+  useEffect(() => {
+    const checkCrisisStatus = () => {
+      const resolved = localStorage.getItem('crisisResolved');
+      const overridden = localStorage.getItem('crisisOverridden');
+
+      if (resolved === 'true' && activeCrisis) {
+        const resolvedBy = localStorage.getItem('crisisResolvedBy') || 'SPECIALIST';
+        resolveCrisis();
+        stopAlert();
+        setAlerts(prev => [
+          {
+            time: '방금',
+            icon: '🟢',
+            text: `危机已解除 · ${resolvedBy} 已被唤醒 · 正在处理`,
+            color: 'text-emerald-400/80',
+          },
+          ...prev,
+        ]);
+        localStorage.removeItem('crisisResolved');
+        localStorage.removeItem('crisisResolvedBy');
+        localStorage.removeItem('crisisResolvedTime');
+      }
+
+      if (overridden === 'true' && activeCrisis) {
+        setOverriddenWarning(true);
+        localStorage.removeItem('crisisOverridden');
+        localStorage.removeItem('crisisOverriddenTime');
+      }
+    };
+
+    checkCrisisStatus();
+    window.addEventListener('focus', checkCrisisStatus);
+    window.addEventListener('storage', checkCrisisStatus);
+    return () => {
+      window.removeEventListener('focus', checkCrisisStatus);
+      window.removeEventListener('storage', checkCrisisStatus);
+    };
+  }, [activeCrisis, resolveCrisis]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -1043,9 +1095,15 @@ export default function HabitatPage() {
 
     const randomCrisis = crisisTypes[Math.floor(Math.random() * crisisTypes.length)];
     setCurrentCrisisType(randomCrisis);
+    setCrisisActive(true);
 
-    initAudio();
-    triggerCrisis(randomCrisis.id, randomCrisis.location);
+    localStorage.setItem('activeCrisisType', randomCrisis.id);
+    localStorage.setItem('activeCrisisLocation', randomCrisis.location);
+    localStorage.setItem('activeCrisisLabel', randomCrisis.label);
+    localStorage.removeItem('crisisResolved');
+    localStorage.removeItem('crisisOverridden');
+
+    triggerCrisis(randomCrisis.id as 'oxygen' | 'radiation' | 'power' | 'pressure', randomCrisis.location);
     setCrisisBanner(true);
     setIsMuted(false);
 
@@ -1054,23 +1112,16 @@ export default function HabitatPage() {
       { time: 'NOW', icon: '🔴', text: `CRISIS: ${randomCrisis.location} ${randomCrisis.desc} · AI ENGINE ACTIVATING`, color: 'text-red-400' },
       ...prev,
     ]);
-    playAlertBeep();
-    alertIntervalRef.current = window.setInterval(playAlertBeep, 3000);
     setTimeout(() => setCrisisBanner(false), 5000);
 
-    localStorage.setItem('activeCrisisType', randomCrisis.id);
-    localStorage.setItem('activeCrisisLocation', randomCrisis.location);
-    localStorage.setItem('activeCrisisLabel', randomCrisis.label);
+    initAudio();
+    setTimeout(() => {
+      playAlertBeep();
+      alertIntervalRef.current = window.setInterval(playAlertBeep, 3000);
+    }, 100);
   };
 
-  const langLabels: Record<string, string> = { zh: '中文', en: 'ENG', mixed: '混合' };
-  const currentLang = localStorage.getItem('lang') || 'zh';
   const handleLogout = () => { localStorage.removeItem('aeonguard_auth'); navigate('/'); };
-  const cycleLanguage = () => {
-    const langs = ['zh', 'en', 'mixed'];
-    localStorage.setItem('lang', langs[(langs.indexOf(currentLang) + 1) % langs.length]);
-    window.location.reload();
-  };
 
   const allZonesFlat = Object.entries(FLOOR_ZONES).flatMap(([, zones]) => zones);
 
@@ -1081,18 +1132,18 @@ export default function HabitatPage() {
       {/* ─── Navbar ─── */}
       <nav className="fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-cyan-500/30 bg-[#000d1a]/80 px-4 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
         <div className="flex items-center gap-2 font-bold tracking-[0.2em]">
-          <Terminal size={18} className="text-cyan-400" /><span>AEONGUARD · 永卫系统</span>
+          <Terminal size={18} className="text-cyan-400" /><span>AEONGUARD</span>
         </div>
         <div className="flex-1 overflow-hidden mx-8 border-x border-cyan-500/10">
           <div className="animate-[ticker_60s_linear_infinite] whitespace-nowrap text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-widest text-cyan-500/80">
             {[0, 1].map(dup => (
               <React.Fragment key={dup}>
-                <span className="mx-4">🟢 环境系统: ALL NOMINAL</span>
-                <span className="mx-4">🟢 氧气水平: 85.2% AVG</span>
-                <span className="mx-4">🟢 辐射屏蔽: ACTIVE</span>
-                <span className="mx-4">🟢 气压: 101.3 kPa</span>
-                <span className="mx-4">🟢 地表温度: -272°C</span>
-                <span className="mx-4">🟢 核心温度: 5500°C STABLE</span>
+                <span className="mx-4">🟢 ENVIRONMENTAL SYSTEMS: ALL NOMINAL</span>
+                <span className="mx-4">🟢 O₂ LEVEL: 85.2% AVG</span>
+                <span className="mx-4">🟢 RADIATION SHIELDING: ACTIVE</span>
+                <span className="mx-4">🟢 PRESSURE: 101.3 kPa</span>
+                <span className="mx-4">🟢 SURFACE TEMP: -272°C</span>
+                <span className="mx-4">🟢 CORE TEMP: 5500°C STABLE</span>
               </React.Fragment>
             ))}
           </div>
@@ -1100,7 +1151,6 @@ export default function HabitatPage() {
         <div className="flex items-center gap-4 text-[clamp(0.625rem,0.7vw,0.875rem)] tracking-widest">
           <div className="flex items-center gap-2 mr-2">
             <button onClick={() => window.location.reload()} className="p-1.5 border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors text-cyan-400/60 hover:text-cyan-400"><RefreshCw size={14} /></button>
-            <button onClick={cycleLanguage} className="flex items-center gap-2 px-3 py-1 border border-cyan-400/50 bg-cyan-400/5 text-cyan-400 hover:bg-cyan-400/10 transition-all font-mono"><Languages size={14} /><span>{langLabels[currentLang]}</span></button>
           </div>
           <div className="flex items-center gap-2">
             <span className="opacity-50">ADMIN_01 · ADMINISTRATOR</span>
@@ -1109,6 +1159,37 @@ export default function HabitatPage() {
           <button onClick={handleLogout} className="flex items-center gap-1 border border-cyan-500/30 px-2 py-1 hover:bg-cyan-500/10 transition-colors"><LogOut size={12} />LOGOUT</button>
         </div>
       </nav>
+
+      {overriddenWarning && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '96px',
+            left: 0,
+            right: 0,
+            zIndex: 999,
+            background: 'rgba(255,170,0,0.15)',
+            border: '1px solid rgba(255,170,0,0.5)',
+            padding: '8px 24px',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            color: '#ffaa00',
+            letterSpacing: '0.2em',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>⚠ AI RECOMMENDATION OVERRIDDEN · CRISIS STILL ACTIVE · ASSIGN SPECIALISTS MANUALLY</span>
+          <button
+            type="button"
+            onClick={() => setOverriddenWarning(false)}
+            style={{ background: 'none', border: 'none', color: '#ffaa00', cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="relative z-[1] flex flex-1 pt-12 bg-[#000d1a]">
         {/* ─── Sidebar ─── */}
@@ -1120,41 +1201,42 @@ export default function HabitatPage() {
           </div>
           <div className={`flex flex-col gap-4 ${sidebarOpen ? '' : 'mt-6'}`}>
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">核心系统 CORE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">CORE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="主页 HOME" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="休眠舱监控 PODS" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="环境警报 HABITAT" active collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI推理引擎 AI ENGINE" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="人工决策 OVERRIDE" badge={pendingCount} collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard" icon={<Home size={14} />} label="HOME" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/pods" icon={<Database size={14} />} label="POD MONITORING" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/habitat" icon={<AlertTriangle size={14} />} label="HABITAT ALERT" active collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/ai" icon={<Cpu size={14} />} label="AI ENGINE" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/override" icon={<Zap size={14} />} label="HUMAN OVERRIDE" badge={overrideBadge} collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
             <div>
-              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">档案 ARCHIVE</div>}
+              {sidebarOpen && <div className="mb-2 text-[clamp(0.625rem,0.7vw,0.875rem)] font-bold tracking-widest opacity-30">ARCHIVE</div>}
               <ul className="space-y-1">
-                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="任务档案 MISSION" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="机组名单 CREW" collapsed={!sidebarOpen} />
-                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="系统日志 SYSLOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/mission" icon={<FileText size={14} />} label="MISSION LOG" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/crew" icon={<Users size={14} />} label="CREW ROSTER" collapsed={!sidebarOpen} />
+                <SidebarItem to="/dashboard/syslog" icon={<ClipboardList size={14} />} label="SYSTEM LOG" collapsed={!sidebarOpen} />
               </ul>
             </div>
             <div className="h-[1px] w-full bg-cyan-500/10" />
-            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="设置 SETTINGS" collapsed={!sidebarOpen} />
+            <SidebarItem to="/dashboard/settings" icon={<Settings size={14} />} label="SETTINGS" collapsed={!sidebarOpen} />
           </div>
         </aside>
 
-        {/* ─── Crisis overlays ─── */}
-        {crisisActive && (
-          <div style={{
-            position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 998,
-            border: '3px solid rgba(255,50,50,0.8)', animation: 'borderPulse 1s ease-in-out infinite',
-            boxShadow: 'inset 0 0 60px rgba(255,0,0,0.2)',
-          }} />
-        )}
+        {/* ─── Crisis overlays (crisisActive is local state; must match first click) ─── */}
         {crisisActive && (
           <div style={{
             position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999,
             animation: 'redAlert 1.5s ease-in-out infinite',
+          }} />
+        )}
+        {crisisActive && (
+          <div style={{
+            position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 998,
+            border: '3px solid rgba(255,50,50,0.8)',
+            animation: 'borderPulse 1s ease-in-out infinite',
+            boxShadow: 'inset 0 0 60px rgba(255,0,0,0.2)',
           }} />
         )}
         {crisisActive && (
@@ -1208,7 +1290,7 @@ export default function HabitatPage() {
 
                 {/* Floor selector tabs */}
                 <div className="shrink-0 p-4 pb-3 border-b border-cyan-500/10">
-                  <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">── SELECT FLOOR · 选择楼层 ──</div>
+                  <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">── SELECT FLOOR ──</div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     {(['B1', 'B2', 'B3', 'B4'] as FloorId[]).map(f => {
                       const isActive = activeFloor === f;
@@ -1231,7 +1313,7 @@ export default function HabitatPage() {
 
                 {/* Zone selector cards */}
                 <div className="shrink-0 p-4 pb-3 border-b border-cyan-500/10">
-                  <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">── ZONE SELECT · 区域选择 ──</div>
+                  <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">── ZONE SELECT ──</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {currentZones.map(z => {
                       const st = zoneStatuses[z.id] || z.status;
@@ -1272,7 +1354,7 @@ export default function HabitatPage() {
 
                 {/* Environmental data for selected zone */}
                 <div className="flex-1 p-4 min-h-0 overflow-y-auto">
-                  <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">── ENVIRONMENTAL DATA · 环境数据 ──</div>
+                  <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">── ENVIRONMENTAL DATA ──</div>
                   <div style={{ opacity: dataVisible ? 1 : 0, transition: 'opacity 0.15s' }}>
                     <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'rgba(0,229,255,0.5)', letterSpacing: '0.15em', marginBottom: '10px' }}>
                       {selectedZone} · {currentZones.find(z => z.id === selectedZone)?.label ?? FLOOR_ZONES[activeFloor][0].label}
@@ -1408,7 +1490,7 @@ export default function HabitatPage() {
                       animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     }}
                   >
-                    ◈ VIEW AI ANALYSIS · 查看AI推理分析 →
+                    ◈ VIEW AI ANALYSIS →
                   </button>
                 </div>
               </>
@@ -1417,7 +1499,7 @@ export default function HabitatPage() {
             {/* Alert Log + Crisis Trigger */}
             <div className="flex gap-6 mb-10">
               <div className="w-[60%] border border-cyan-500/10 bg-[rgba(0,0,0,0.2)] p-6">
-                <div className="text-[clamp(0.7rem,0.85vw,0.9rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-4">── ALERT HISTORY · 警报记录 ──</div>
+                <div className="text-[clamp(0.7rem,0.85vw,0.9rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-4">── ALERT HISTORY ──</div>
                 <div className="space-y-1.5 overflow-y-auto" style={{ maxHeight: 240 }}>
                   {alerts.map((evt, i) => (
                     <div key={i} className="flex items-center gap-2 text-[clamp(0.55rem,0.65vw,0.7rem)] tracking-widest">
@@ -1449,7 +1531,7 @@ export default function HabitatPage() {
             </div>
 
             {/* All zones overview table */}
-            <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── ALL ZONES OVERVIEW · 全区域总览 ──</div>
+                <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── ALL ZONES OVERVIEW ──</div>
             <div className="border border-cyan-500/10 bg-[rgba(0,0,0,0.2)] overflow-hidden">
               <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'monospace', fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>
                 <thead>
@@ -1491,7 +1573,7 @@ export default function HabitatPage() {
 
             {/* Environment Heatmap */}
             <div className="mt-10">
-              <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── ENVIRONMENT HEATMAP · 环境热力图 ──</div>
+              <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── ENVIRONMENT HEATMAP ──</div>
               <EnvironmentHeatmap selectedZone={selectedZone} onSelectZone={handleZoneSelect} />
             </div>
 
@@ -1601,7 +1683,7 @@ function SystemHealthScore() {
 
   return (
     <div className="mt-10">
-      <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── SYSTEM HEALTH SCORE · 环境系统健康度 ──</div>
+                <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── HEALTH SCORE ──</div>
       <div style={{ display: 'flex', gap: '0', border: '1px solid rgba(0,229,255,0.1)', background: 'rgba(0,0,0,0.2)' }}>
         {/* Left: big score */}
         <div style={{ width: '40%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', borderRight: '1px solid rgba(0,229,255,0.1)' }}>
@@ -1711,7 +1793,7 @@ function PredictiveAnalysis({ selectedPrediction, onToggle, onViewZone, onFlag }
 
   return (
     <div className="mt-10">
-      <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-1">── PREDICTIVE ANALYSIS · 预测分析 ──</div>
+      <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-1">── PREDICTIVE ANALYSIS ──</div>
       <div style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(0,229,255,0.35)', letterSpacing: '0.15em', marginBottom: '16px' }}>
         基于过去24小时趋势推算未来2小时走向
       </div>
@@ -1889,7 +1971,7 @@ function VentilationSystem({ ventData, selectedVent, onToggle, onBoost, onMainte
 
   return (
     <div className="mt-10">
-      <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── VENTILATION SYSTEM · 通风系统 ──</div>
+      <div className="text-[clamp(0.9rem,1.1vw,1.2rem)] font-bold tracking-[0.3em] text-cyan-400 mb-4">── VENTILATION SYSTEM ──</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
         {ventData.map(v => {
           const pct = Math.min(100, (v.flow / v.target) * 100);
@@ -2013,7 +2095,7 @@ function VentilationSystem({ ventData, selectedVent, onToggle, onBoost, onMainte
         <span style={{ color: lowCount > 0 ? '#ffaa00' : '#00ff88' }}>{lowCount > 0 ? `⚠ LOW VENTS: ${lowCount}` : '✓ ALL VENTS NOMINAL'}</span>
       </div>
       <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '9px', color: 'rgba(0,229,255,0.3)', letterSpacing: '0.1em' }}>
-        通风系统为地下城提供氧气循环 · VENTILATION MAINTAINS O₂ CIRCULATION IN UNDERGROUND CITY
+        VENTILATION MAINTAINS O₂ CIRCULATION IN THE UNDERGROUND CITY
       </div>
     </div>
   );

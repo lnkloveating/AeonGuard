@@ -6,12 +6,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Terminal, Shield, Cpu, Activity, Lock, User, ChevronRight, FastForward, Volume2, VolumeX } from 'lucide-react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import LinguaWidget from './components/LinguaWidget';
 import HomePage from './pages/HomePage';
 import PodsPage from './pages/PodsPage';
 import HabitatPage from './pages/HabitatPage';
-import PlaceholderPage from './pages/PlaceholderPage';
 import AIEnginePage from './pages/AIEnginePage';
+import OverridePage from './pages/OverridePage';
+import MissionPage from './pages/MissionPage';
+import CrewPage from './pages/CrewPage';
+import SysLogPage from './pages/SysLogPage';
+import SettingsPage from './pages/SettingsPage';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  return localStorage.getItem('aeonguard_auth') === 'true' ? <>{children}</> : <Navigate to="/" replace />;
+}
 
 const USERS = [
   { id: 'ADMIN_01', password: 'earth2500', role: 'ADMINISTRATOR', name: 'Administrator' },
@@ -1054,6 +1063,12 @@ function LoginView() {
   );
 }
 
+function LinguaWidgetHost() {
+  useLocation();
+  const isLoggedIn = !!localStorage.getItem('aeonguard_auth');
+  return isLoggedIn ? <LinguaWidget /> : null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -1063,12 +1078,13 @@ export default function App() {
         <Route path="/dashboard/pods" element={<PodsPage />} />
         <Route path="/dashboard/habitat" element={<HabitatPage />} />
         <Route path="/dashboard/ai" element={<AIEnginePage />} />
-        <Route path="/dashboard/override" element={<PlaceholderPage title="人工决策 OVERRIDE" />} />
-        <Route path="/dashboard/mission" element={<PlaceholderPage title="任务档案 MISSION LOG" />} />
-        <Route path="/dashboard/crew" element={<PlaceholderPage title="机组名单 CREW ROSTER" />} />
-        <Route path="/dashboard/syslog" element={<PlaceholderPage title="系统日志 SYSTEM LOG" />} />
-        <Route path="/dashboard/settings" element={<PlaceholderPage title="设置 SETTINGS" />} />
+        <Route path="/dashboard/override" element={<ProtectedRoute><OverridePage /></ProtectedRoute>} />
+        <Route path="/dashboard/mission" element={<ProtectedRoute><MissionPage /></ProtectedRoute>} />
+        <Route path="/dashboard/crew" element={<ProtectedRoute><CrewPage /></ProtectedRoute>} />
+        <Route path="/dashboard/syslog" element={<ProtectedRoute><SysLogPage /></ProtectedRoute>} />
+        <Route path="/dashboard/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       </Routes>
+      <LinguaWidgetHost />
     </BrowserRouter>
   );
 }
