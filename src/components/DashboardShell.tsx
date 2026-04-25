@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 
 export type ArchiveNav = 'mission' | 'crew' | 'syslog';
 
@@ -49,7 +50,7 @@ export default function DashboardShell({
   }, [typewriterTitle]);
 
   const handleLogout = () => {
-    localStorage.removeItem('aeonguard_auth');
+    clearSessionDataForLogout();
     navigate('/');
   };
 

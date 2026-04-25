@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 import {
   Terminal,
   Home,
@@ -94,7 +95,7 @@ export default function SettingsPage() {
   );
 
   const handleLogout = () => {
-    localStorage.removeItem('aeonguard_auth');
+    clearSessionDataForLogout();
     navigate('/');
   };
 
@@ -285,51 +286,7 @@ export default function SettingsPage() {
               </div>
             </section>
 
-            {/* Section 2 — System data */}
-            <section>
-              <div className="text-[clamp(0.65rem,0.75vw,0.85rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-4">
-                ── SYSTEM DATA ──
-              </div>
-              <div className="flex flex-wrap gap-4 items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        'Reset all system data (overrides, pending decisions, crisis state, pod overrides)? This cannot be undone.'
-                      )
-                    ) {
-                      return;
-                    }
-                    localStorage.removeItem('overrideDecisions');
-                    localStorage.removeItem('pendingDecisions');
-                    localStorage.removeItem('pendingDecisionCount');
-                    localStorage.removeItem('activeCrisisType');
-                    Object.keys(localStorage).forEach(key => {
-                      if (key.startsWith('podOverride_')) localStorage.removeItem(key);
-                    });
-                    alert('System data reset complete');
-                    window.location.reload();
-                  }}
-                  className="text-[clamp(0.55rem,0.65vw,0.7rem)] px-3 py-1.5 tracking-widest border border-red-500/70 text-red-400/90 hover:bg-red-500/10 transition-colors"
-                >
-                  ↺ RESET SYSTEM DATA
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem('aeonguard_auth');
-                    navigate('/');
-                  }}
-                  className="text-[clamp(0.6rem,0.7vw,0.75rem)] px-4 py-2 tracking-widest border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-                >
-                  ⏻ LOGOUT
-                </button>
-              </div>
-            </section>
-
-            {/* Section 3 — About */}
+            {/* Section 2 — About */}
             <section>
               <div className="text-[clamp(0.65rem,0.75vw,0.85rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-4">
                 ── ABOUT ──

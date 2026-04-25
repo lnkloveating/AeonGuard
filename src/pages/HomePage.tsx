@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Terminal,
@@ -20,6 +20,7 @@ import { motion } from 'motion/react';
 import EarthScene from '../components/EarthScene';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 
 export default function HomePage() {
   const overrideBadge = useOverrideBadge();
@@ -63,6 +64,59 @@ export default function HomePage() {
   const [countdown, setCountdown] = useState({ d: 43, h: 6, m: 22, s: 14 });
   const [habitatPop, setHabitatPop] = useState(3.500);
   const [coreTemp, setCoreTemp] = useState(500);
+
+  const [recentEvents, setRecentEvents] = useState<
+    { time: string; type: 'INFO' | 'SUCCESS' | 'WARNING'; text: string }[]
+  >([
+    { time: 'YEAR 847 · DAY 12,403', type: 'INFO', text: 'Routine system diagnostic completed. All 850 systems nominal.' },
+    { time: 'YEAR 847 · DAY 12,403', type: 'INFO', text: 'Navigation trajectory check passed. Heading: PROXIMA CENTAURI.' },
+    { time: 'YEAR 847 · DAY 12,402', type: 'INFO', text: 'Engine output stable at 98.4%. All groups nominal.' },
+    { time: 'YEAR 847 · DAY 12,401', type: 'INFO', text: 'Crew rotation cycle 847-Q3 monitoring in progress.' },
+    { time: 'YEAR 847 · DAY 12,400', type: 'INFO', text: 'Long-range sensor sweep completed. No anomalies detected.' },
+  ]);
+
+  const loadRecentEvents = useCallback(() => {
+    const crisisResolvedBy = localStorage.getItem('crisisResolvedBy');
+    const crisisResolved = localStorage.getItem('crisisResolved');
+    const crisisOverridden = localStorage.getItem('crisisOverridden');
+
+    const toPrepend: { time: string; type: 'SUCCESS' | 'WARNING'; text: string }[] = [];
+    if (crisisResolved === 'true' && crisisResolvedBy) {
+      toPrepend.push({
+        time: 'JUST NOW',
+        type: 'SUCCESS',
+        text: `Crisis resolved. ${crisisResolvedBy} wake sequence authorized by administrator.`,
+      });
+    }
+    if (crisisOverridden === 'true') {
+      toPrepend.push({
+        time: 'JUST NOW',
+        type: 'WARNING',
+        text: 'AI recommendation overridden by administrator. Crisis remains active.',
+      });
+    }
+    if (toPrepend.length) {
+      setRecentEvents(prev => [...toPrepend, ...prev].slice(0, 10));
+    }
+    try {
+      if (crisisResolved === 'true' && crisisResolvedBy) {
+        localStorage.removeItem('crisisResolved');
+        localStorage.removeItem('crisisResolvedBy');
+      }
+      if (crisisOverridden === 'true') {
+        localStorage.removeItem('crisisOverridden');
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecentEvents();
+    const onF = () => loadRecentEvents();
+    window.addEventListener('focus', onF);
+    return () => window.removeEventListener('focus', onF);
+  }, [loadRecentEvents]);
 
   const engineHistory = useMemo(() => {
     return Array.from({ length: 24 }, (_, i) => ({
@@ -326,7 +380,7 @@ export default function HomePage() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('aeonguard_auth');
+    clearSessionDataForLogout();
     navigate('/');
   };
 
@@ -829,11 +883,14 @@ export default function HomePage() {
             <h3 className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold tracking-[0.3em]">RECENT EVENTS</h3>
             <div className="grid grid-cols-[65%_35%] gap-6">
               <div className="border border-cyan-500/10 bg-[#000f1e]/50 p-6 space-y-4">
-                <EventItem time="2H AGO" icon="🟡" text="AI engine: minor O₂ bay A-7 anomaly · cleared" />
-                <EventItem time="6H AGO" icon="🟢" text="Crew rotation: ZHANG_LI to hibernation · CHEN_WEI awake" />
-                <EventItem time="1 DAY AGO" icon="🟢" text="Engine group E-7 maintenance complete" />
-                <EventItem time="3 DAYS AGO" icon="🔴" text="Radiation spike · repaired by engineering" />
-                <EventItem time="7 DAYS AGO" icon="🟢" text="Full system inspection passed" />
+                {recentEvents.map((ev, i) => (
+                  <EventItem
+                    key={i}
+                    time={ev.time}
+                    icon={ev.type === 'SUCCESS' ? '🟢' : ev.type === 'WARNING' ? '🟡' : '🔵'}
+                    text={ev.text}
+                  />
+                ))}
               </div>
               <div className="border border-cyan-500/10 bg-[rgba(0,0,0,0.4)] flex flex-col overflow-hidden">
                 <div className="p-3 border-b border-cyan-500/10 text-[clamp(0.5625rem,0.625vw,0.8125rem)] font-bold tracking-[0.2em] text-cyan-500/40 text-center">

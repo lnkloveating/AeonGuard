@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAeonStore } from '../store/aeonStore';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -890,7 +891,6 @@ export default function HabitatPage() {
   const overrideBadge = useOverrideBadge();
   const [overriddenWarning, setOverriddenWarning] = useState(false);
   const [crisisBanner, setCrisisBanner] = useState(false);
-  const [crisisAcknowledged, setCrisisAcknowledged] = useState(false);
   const [currentCrisisType, setCurrentCrisisType] = useState<any>(null);
   const [countdown, setCountdown] = useState(5400);
   const [selectedPrediction, setSelectedPrediction] = useState<string | null>(null);
@@ -960,8 +960,11 @@ export default function HabitatPage() {
     }
   };
 
-  const handleAcknowledge = () => {
-    const loc = currentCrisisType?.location ?? activeCrisis?.location;
+  const finishCrisis = (locationOverride?: string | null) => {
+    const loc =
+      locationOverride !== undefined
+        ? locationOverride
+        : (currentCrisisType?.location ?? activeCrisis?.location);
     stopAlert();
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
@@ -970,7 +973,6 @@ export default function HabitatPage() {
     setCrisisActive(false);
     resolveCrisis();
     setCrisisBanner(false);
-    setCrisisAcknowledged(false);
     setIsMuted(false);
     setDispatchedRoutes([]);
     setSelectedRoute(null);
@@ -983,6 +985,25 @@ export default function HabitatPage() {
     localStorage.removeItem('activeCrisisLocation');
     localStorage.removeItem('activeCrisisLabel');
   };
+
+  const finishCrisisRef = useRef(finishCrisis);
+  finishCrisisRef.current = finishCrisis;
+
+  useEffect(() => {
+    const checkResolved = () => {
+      if (localStorage.getItem('crisisResolved') !== 'true') return;
+      const loc = localStorage.getItem('activeCrisisLocation');
+      localStorage.removeItem('crisisResolved');
+      localStorage.removeItem('crisisResolvedBy');
+      finishCrisisRef.current(loc);
+    };
+    window.addEventListener('focus', checkResolved);
+    const interval = setInterval(checkResolved, 1000);
+    return () => {
+      window.removeEventListener('focus', checkResolved);
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1088,10 +1109,7 @@ export default function HabitatPage() {
   ];
 
   const triggerCrisisEvent = () => {
-    if (crisisActive) {
-      handleAcknowledge();
-      return;
-    }
+    if (crisisActive) return;
 
     const randomCrisis = crisisTypes[Math.floor(Math.random() * crisisTypes.length)];
     setCurrentCrisisType(randomCrisis);
@@ -1121,7 +1139,10 @@ export default function HabitatPage() {
     }, 100);
   };
 
-  const handleLogout = () => { localStorage.removeItem('aeonguard_auth'); navigate('/'); };
+  const handleLogout = () => {
+    clearSessionDataForLogout();
+    navigate('/');
+  };
 
   const allZonesFlat = Object.entries(FLOOR_ZONES).flatMap(([, zones]) => zones);
 
@@ -1255,18 +1276,6 @@ export default function HabitatPage() {
             </span>
           </div>
         )}
-        {crisisActive && (
-          <button type="button" onClick={toggleMute} style={{
-            position: 'fixed', top: '96px', right: '16px', zIndex: 1001,
-            background: isMuted ? 'rgba(60,60,60,0.9)' : 'rgba(180,0,0,0.8)',
-            border: `1px solid ${isMuted ? '#666' : '#ff4444'}`,
-            color: 'white', fontFamily: 'monospace', fontSize: '11px',
-            padding: '6px 12px', cursor: 'pointer', letterSpacing: '0.2em',
-          }}>
-            {isMuted ? '🔊 UNMUTE ALARM' : '🔇 MUTE ALARM'}
-          </button>
-        )}
-
         {/* ─── Main ─── */}
         <main className={`flex-1 overflow-y-auto overflow-x-hidden bg-[#000d1a] transition-all duration-300 ease-in-out ${sidebarOpen ? 'ml-[14vw]' : 'ml-[48px]'}`}>
 
@@ -1455,9 +1464,6 @@ export default function HabitatPage() {
               <>
                 <EmergencyEvacuation
                   countdown={countdown}
-                  acknowledged={crisisAcknowledged}
-                  onAcknowledge={handleAcknowledge}
-                  onReset={handleAcknowledge}
                   selectedRoute={selectedRoute}
                   onToggleRoute={from => setSelectedRoute(prev => prev === from ? null : from)}
                   dispatchedRoutes={dispatchedRoutes}
@@ -1469,25 +1475,50 @@ export default function HabitatPage() {
                     ]);
                   }}
                 />
-                <div style={{
-                  margin: '16px 0',
-                  display: 'flex',
-                  justifyContent: 'center',
-                }}>
+                <div style={{ display: 'flex', gap: '12px', margin: '16px 0', justifyContent: 'center' }}>
                   <button
-                    onClick={() => navigate('/dashboard/ai')}
+                    type="button"
+                    onClick={toggleMute}
                     style={{
-                      padding: '14px 40px',
+                      padding: '10px 20px',
+                      background: 'transparent',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: 'rgba(255,255,255,0.5)',
+                      fontFamily: 'monospace', fontSize: '10px',
+                      letterSpacing: '0.2em', cursor: 'pointer',
+                    }}
+                  >
+                    {isMuted ? '🔊 UNMUTE' : '🔇 MUTE ALARM'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const crisisTypeMap: Record<string, string> = {
+                        'O₂ CRITICAL': 'oxygen',
+                        'RADIATION SURGE': 'radiation',
+                        'POWER FAILURE': 'power',
+                        'PRESSURE ANOMALY': 'pressure',
+                      };
+                      const crisisId = crisisTypeMap[currentCrisisType?.label || ''] || currentCrisisType?.id || 'oxygen';
+                      localStorage.setItem('activeCrisisType', crisisId);
+                      localStorage.setItem('activeCrisisLocation', currentCrisisType?.location || 'UNKNOWN');
+                      localStorage.setItem('activeCrisisLabel', currentCrisisType?.label || 'CRISIS');
+                      // Do not set recommendedPod / recommendedPerson — signals C2 (Habitat) vs C1 (Pods)
+                      localStorage.removeItem('recommendedPod');
+                      localStorage.removeItem('recommendedPerson');
+                      localStorage.removeItem('recommendedRole');
+                      navigate('/dashboard/ai');
+                    }}
+                    style={{
+                      padding: '10px 32px',
                       background: 'rgba(0,229,255,0.1)',
                       border: '2px solid #00e5ff',
                       color: '#00e5ff',
-                      fontFamily: 'monospace',
-                      fontSize: 'clamp(0.8rem,1vw,1rem)',
-                      letterSpacing: '0.3em',
-                      cursor: 'pointer',
-                      fontWeight: 'bold',
+                      fontFamily: 'monospace', fontSize: '11px',
+                      letterSpacing: '0.3em', cursor: 'pointer', fontWeight: 'bold',
                       boxShadow: '0 0 20px rgba(0,229,255,0.3)',
-                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                      animation: 'podGlow 2s ease-in-out infinite',
                     }}
                   >
                     ◈ VIEW AI ANALYSIS →
@@ -1512,20 +1543,24 @@ export default function HabitatPage() {
               </div>
               <div className="w-[40%] border border-cyan-500/10 bg-[rgba(0,0,0,0.2)] p-6 flex flex-col items-center justify-center">
                 <div className="text-[clamp(0.7rem,0.85vw,0.9rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-6">── CRISIS CONTROL ──</div>
-                <button onClick={triggerCrisisEvent} style={{
-                  padding: '18px 36px', fontSize: '14px', fontFamily: 'monospace', fontWeight: 'bold',
-                  letterSpacing: '0.3em', cursor: 'pointer', transition: 'all 0.3s',
-                  border: crisisActive ? '2px solid rgba(255,170,0,0.6)' : '2px solid rgba(255,0,0,0.6)',
-                  background: crisisActive ? 'rgba(255,170,0,0.15)' : 'rgba(255,0,0,0.1)',
-                  color: crisisActive ? '#ffaa00' : '#ff4444',
-                  animation: crisisActive ? 'blink 1s infinite' : 'none',
-                }}
+                <button
+                  type="button"
+                  disabled={crisisActive}
+                  onClick={triggerCrisisEvent}
+                  style={{
+                    padding: '18px 36px', fontSize: '14px', fontFamily: 'monospace', fontWeight: 'bold',
+                    letterSpacing: '0.3em', cursor: crisisActive ? 'not-allowed' : 'pointer', transition: 'all 0.3s',
+                    border: crisisActive ? '2px solid rgba(255,170,0,0.4)' : '2px solid rgba(255,0,0,0.6)',
+                    background: crisisActive ? 'rgba(255,170,0,0.1)' : 'rgba(255,0,0,0.1)',
+                    color: crisisActive ? '#ffaa00' : '#ff4444',
+                    animation: crisisActive ? 'blink 1s infinite' : 'none', opacity: crisisActive ? 0.85 : 1,
+                  }}
                   onMouseEnter={e => { if (!crisisActive) e.currentTarget.style.background = 'rgba(255,0,0,0.25)'; }}
                   onMouseLeave={e => { if (!crisisActive) e.currentTarget.style.background = 'rgba(255,0,0,0.1)'; }}>
-                  {crisisActive ? '⚠ CRISIS ACTIVE · RESET' : '⚠ TRIGGER CRISIS EVENT'}
+                  {crisisActive ? '⚠ CRISIS ACTIVE' : '⚠ TRIGGER CRISIS EVENT'}
                 </button>
                 <div className="mt-4 text-[clamp(0.5rem,0.6vw,0.65rem)] tracking-widest text-cyan-500/30 text-center">
-                  {crisisActive ? 'AI ENGINE IS RESPONDING · CLICK TO RESET' : 'RANDOM TRIGGER · ADDS ALERT'}
+                  {crisisActive ? 'RESOLUTION REQUIRES C4 DECISION ACCEPT' : 'RANDOM TRIGGER · ADDS ALERT'}
                 </div>
               </div>
             </div>
@@ -1633,6 +1668,10 @@ export default function HabitatPage() {
         @keyframes bannerPulse {
           0%, 100% { opacity: 0.85; }
           50% { opacity: 1; }
+        }
+        @keyframes podGlow {
+          0%, 100% { box-shadow: 0 0 20px rgba(0, 229, 255, 0.3); }
+          50% { box-shadow: 0 0 32px rgba(0, 229, 255, 0.55); }
         }
         .evac-route-card { transition: box-shadow 0.2s, filter 0.2s; }
         .evac-route-card:hover {
@@ -2113,8 +2152,8 @@ const EVACUATION_ROUTES: {
     { from: 'B2-I2', label: '工业区 B', priority: 4, route: 'B2-I2 → 工业通道 → 紧急出口E4', time: '8 MIN', capacity: 1200, mapPath: 'M 460 188 L 562 182', dimStroke: 'rgba(0,229,255,0.35)' },
   ];
 
-function EmergencyEvacuation({ countdown, acknowledged, onAcknowledge, onReset, selectedRoute, onToggleRoute, dispatchedRoutes, onDispatchRoute }: {
-  countdown: number; acknowledged: boolean; onAcknowledge: () => void; onReset: () => void;
+function EmergencyEvacuation({ countdown, selectedRoute, onToggleRoute, dispatchedRoutes, onDispatchRoute }: {
+  countdown: number;
   selectedRoute: string | null; onToggleRoute: (from: string) => void;
   dispatchedRoutes: string[]; onDispatchRoute: (from: string, label: string, priority: number) => void;
 }) {
@@ -2344,26 +2383,6 @@ function EmergencyEvacuation({ countdown, acknowledged, onAcknowledge, onReset, 
             </div>
           );
         })}
-      </div>
-
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-        <button onClick={onAcknowledge} style={{
-          padding: '12px 28px', fontFamily: 'monospace', fontSize: '12px', fontWeight: 'bold',
-          letterSpacing: '0.2em', cursor: 'pointer', transition: 'all 0.3s',
-          border: acknowledged ? '2px solid rgba(0,255,136,0.5)' : '2px solid rgba(0,229,255,0.5)',
-          background: acknowledged ? 'rgba(0,255,136,0.1)' : 'rgba(0,229,255,0.08)',
-          color: acknowledged ? '#00ff88' : '#00e5ff',
-        }}>
-          {acknowledged ? '✓ ACKNOWLEDGED · RESPONSE TEAM DISPATCHED' : '✓ ACKNOWLEDGE CRISIS'}
-        </button>
-        <button onClick={onReset} style={{
-          padding: '12px 28px', fontFamily: 'monospace', fontSize: '12px', fontWeight: 'bold',
-          letterSpacing: '0.2em', cursor: 'pointer', transition: 'all 0.3s',
-          border: '2px solid rgba(255,170,0,0.5)', background: 'rgba(255,170,0,0.08)', color: '#ffaa00',
-        }}>
-          ↺ RESET TO NORMAL
-        </button>
       </div>
     </div>
   );

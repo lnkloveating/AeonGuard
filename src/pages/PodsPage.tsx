@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAeonStore } from '../store/aeonStore';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 import {
   Terminal,
   Home,
@@ -34,7 +34,7 @@ import {
   Bar,
 } from 'recharts';
 
-type PodStatus = 'NOMINAL' | 'WARNING' | 'DORMANT' | 'CRITICAL' | 'WAKING' | 'AWAKE';
+type PodStatus = 'NOMINAL' | 'WARNING' | 'CRITICAL' | 'WAKING' | 'AWAKE' | 'OVERRIDDEN';
 
 interface Pod {
   id: string;
@@ -94,17 +94,107 @@ const scheduleData = [
 const statusStyles: Record<PodStatus, { bg: string; border: string; dot: string }> = {
   NOMINAL: { bg: 'rgba(0,229,255,0.05)', border: 'rgba(0,229,255,0.2)', dot: 'bg-cyan-400' },
   WARNING: { bg: 'rgba(255,170,0,0.08)', border: 'rgba(255,170,0,0.4)', dot: 'bg-amber-400' },
-  DORMANT: { bg: 'rgba(0,50,100,0.1)', border: 'rgba(0,100,200,0.2)', dot: 'bg-blue-400/50' },
   CRITICAL: { bg: 'rgba(255,0,0,0.1)', border: 'rgba(255,50,50,0.6)', dot: 'bg-red-500' },
   WAKING: { bg: 'rgba(255,140,0,0.1)', border: 'rgba(255,140,0,0.6)', dot: 'bg-orange-400' },
   AWAKE: { bg: 'rgba(0,255,136,0.1)', border: 'rgba(0,255,136,0.6)', dot: 'bg-green-400' },
+  OVERRIDDEN: { bg: 'rgba(160,100,255,0.1)', border: 'rgba(180,120,255,0.45)', dot: 'bg-violet-400' },
 };
 
+function loadPodOverrideMapFromStorage(): Record<string, string> {
+  if (typeof localStorage === 'undefined') return {};
+  const overrides: Record<string, string> = {};
+  for (let i = 1; i <= 127; i++) {
+    const podId = `POD-${String(i).padStart(3, '0')}`;
+    const saved = localStorage.getItem(`podOverride_${podId}`);
+    if (saved) overrides[podId] = saved;
+  }
+  return overrides;
+}
+
+const SESSION_WARNING_POD_KEY = 'warningPod';
+const SESSION_CRITICAL_POD_KEY = 'criticalPod';
+
+/** POD-108 … POD-127 (last 20 pods) */
+const LAST_20_POD_IDS: readonly string[] = Array.from(
+  { length: 20 },
+  (_, i) => `POD-${String(108 + i).padStart(3, '0')}`
+);
+
+function pickTwoDistinctScenarioPods(): { warningId: string; criticalId: string } {
+  let a = Math.floor(Math.random() * 20);
+  let b = Math.floor(Math.random() * 20);
+  while (b === a) b = Math.floor(Math.random() * 20);
+  return { warningId: LAST_20_POD_IDS[a], criticalId: LAST_20_POD_IDS[b] };
+}
+
+/**
+ * One WARNING + one CRITICAL from the last 20 pods, stable for the session (sessionStorage).
+ * New random pair after logout clears sessionStorage.
+ */
+function ensureSessionScenarioPods(): { warningId: string; criticalId: string } {
+  if (typeof sessionStorage === 'undefined') {
+    return { warningId: LAST_20_POD_IDS[0], criticalId: LAST_20_POD_IDS[1] };
+  }
+  const w = sessionStorage.getItem(SESSION_WARNING_POD_KEY);
+  const c = sessionStorage.getItem(SESSION_CRITICAL_POD_KEY);
+  if (w && c && w !== c && LAST_20_POD_IDS.includes(w) && LAST_20_POD_IDS.includes(c)) {
+    return { warningId: w, criticalId: c };
+  }
+  const { warningId, criticalId } = pickTwoDistinctScenarioPods();
+  sessionStorage.setItem(SESSION_WARNING_POD_KEY, warningId);
+  sessionStorage.setItem(SESSION_CRITICAL_POD_KEY, criticalId);
+  return { warningId, criticalId };
+}
+
+function getSessionScenarioPodIds(): string[] {
+  const { warningId, criticalId } = ensureSessionScenarioPods();
+  return [warningId, criticalId];
+}
+
+function loadPodOverrideMapExcludingDefaultPods(): Record<string, string> {
+  const { warningId, criticalId } = ensureSessionScenarioPods();
+  const skip = new Set<string>([warningId, criticalId]);
+  if (typeof localStorage === 'undefined') return {};
+  const overrides: Record<string, string> = {};
+  for (let i = 1; i <= 127; i++) {
+    const podId = `POD-${String(i).padStart(3, '0')}`;
+    if (skip.has(podId)) continue;
+    const saved = localStorage.getItem(`podOverride_${podId}`);
+    if (saved) overrides[podId] = saved;
+  }
+  return overrides;
+}
+
+function generatePods(): Pod[] {
+  const { warningId, criticalId } = ensureSessionScenarioPods();
+  return Array.from({ length: 127 }, (_, i) => {
+    const idNum = i + 1;
+    const id = `POD-${String(idNum).padStart(3, '0')}`;
+    let status: PodStatus = 'NOMINAL';
+    if (id === warningId) status = 'WARNING';
+    if (id === criticalId) status = 'CRITICAL';
+    const name = idNum === 119 ? 'DAVIS_K' : idNum === 126 ? 'SMITH_E' : randomName(i);
+    const role =
+      idNum === 119 ? 'Life Support Engineer' : idNum === 126 ? 'Nuclear Engineer' : randomRole(i);
+    return {
+      id,
+      name,
+      role,
+      status,
+      heartRate: 45 + ((i * 17 + 5) % 21),
+      temperature: +(35.5 + ((i * 13 + 7) % 16) / 10).toFixed(1),
+      metabolism: 15 + ((i * 11 + 3) % 11),
+      pod: idNum,
+    };
+  });
+}
+
 export default function PodsPage() {
-  const { podOverrides: storePodOverrides } = useAeonStore();
   const overrideBadge = useOverrideBadge();
   const navigate = useNavigate();
-  const [podOverrides, setPodOverrides] = useState<Record<string, string>>({});
+  const [podOverrides, setPodOverrides] = useState<Record<string, string>>(() =>
+    loadPodOverrideMapExcludingDefaultPods()
+  );
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedPod, setSelectedPod] = useState<Pod | null>(null);
   const [filter, setFilter] = useState<PodStatus | 'ALL'>('ALL');
@@ -116,69 +206,101 @@ export default function PodsPage() {
   const fullTitle = 'POD MONITORING SYSTEM';
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const pods = useMemo<Pod[]>(() => {
-    return Array.from({ length: 127 }, (_, i) => {
-      const idNum = i + 1;
-      let status: PodStatus = 'NOMINAL';
-      if (idNum >= 119 && idNum <= 123) status = 'WARNING';
-      if (idNum >= 124 && idNum <= 125) status = 'DORMANT';
-      if (idNum >= 126) status = 'CRITICAL';
-      const id = `POD-${String(idNum).padStart(3, '0')}`;
-      return {
-        id,
-        name: randomName(i),
-        role: randomRole(i),
-        status,
-        heartRate: 45 + ((i * 17 + 5) % 21),
-        temperature: +(35.5 + ((i * 13 + 7) % 16) / 10).toFixed(1),
-        metabolism: 15 + ((i * 11 + 3) % 11),
-        pod: idNum,
-      };
-    });
+  const pods = useMemo<Pod[]>(() => generatePods(), []);
+
+  const runPendingDecisionPodCleanup = useCallback(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as {
+        status?: string;
+        recommendedPod?: string;
+      }[];
+      if (Array.isArray(stored)) {
+        const overridden = stored.filter(d => d.status === 'OVERRIDDEN');
+        for (const d of overridden) {
+          const pod = d.recommendedPod;
+          if (!pod) continue;
+          const current = localStorage.getItem(`podOverride_${pod}`);
+          if (current === 'WAKING') {
+            localStorage.removeItem(`podOverride_${pod}`);
+          }
+        }
+      }
+    } catch {
+      /* noop */
+    }
   }, []);
 
+  /** Full sync from localStorage (e.g. after C4 WAKING) — includes default-scenario pods. */
   const reloadPodOverridesFromStorage = useCallback(() => {
-    const overrides: Record<string, string> = {};
-    for (let i = 1; i <= 127; i++) {
-      const podId = `POD-${String(i).padStart(3, '0')}`;
-      const override = localStorage.getItem(`podOverride_${podId}`);
-      if (override) overrides[podId] = override;
-    }
-    setPodOverrides(overrides);
-  }, []);
+    runPendingDecisionPodCleanup();
+    setPodOverrides(loadPodOverrideMapFromStorage());
+  }, [runPendingDecisionPodCleanup]);
+
+  /** Mount: cleanup + do not re-hydrate session scenario pods (WARNING/CRITICAL) from localStorage. */
+  const reloadPodOverridesExcludingDefaultPods = useCallback(() => {
+    runPendingDecisionPodCleanup();
+    setPodOverrides(loadPodOverrideMapExcludingDefaultPods());
+  }, [runPendingDecisionPodCleanup]);
 
   useEffect(() => {
-    reloadPodOverridesFromStorage();
-  }, [reloadPodOverridesFromStorage]);
+    reloadPodOverridesExcludingDefaultPods();
+  }, [reloadPodOverridesExcludingDefaultPods]);
 
   useEffect(() => {
     const sync = () => reloadPodOverridesFromStorage();
     window.addEventListener('focus', sync);
     window.addEventListener('storage', sync);
     window.addEventListener('aeonguard:podOverride', sync);
+    window.addEventListener('aeonguard:decisionsUpdated', sync);
     return () => {
       window.removeEventListener('focus', sync);
       window.removeEventListener('storage', sync);
       window.removeEventListener('aeonguard:podOverride', sync);
+      window.removeEventListener('aeonguard:decisionsUpdated', sync);
     };
   }, [reloadPodOverridesFromStorage]);
 
+  // Session scenario pods: initial state skips localStorage, so poll for C4 (WAKING / OVERRIDDEN / NOMINAL) after mount
+  useEffect(() => {
+    const checkOverrides = () => {
+      const updates: Record<string, string> = {};
+      getSessionScenarioPodIds().forEach(podId => {
+        const saved = localStorage.getItem(`podOverride_${podId}`);
+        if (saved) updates[podId] = saved;
+      });
+      if (Object.keys(updates).length > 0) {
+        setPodOverrides(prev => ({ ...prev, ...updates }));
+      }
+    };
+
+    checkOverrides();
+    window.addEventListener('focus', checkOverrides);
+    const interval = setInterval(checkOverrides, 1000);
+    return () => {
+      window.removeEventListener('focus', checkOverrides);
+      clearInterval(interval);
+    };
+  }, []);
+
   const getEffectiveStatus = useCallback(
     (pod: Pod): PodStatus => {
-      const o = podOverrides[pod.id] || storePodOverrides[pod.id];
-      return (o as PodStatus) || pod.status;
+      return (podOverrides[pod.id] as PodStatus) || pod.status;
     },
-    [podOverrides, storePodOverrides]
+    [podOverrides]
   );
 
-  const handleStatusChange = useCallback((podId: string, newStatus: PodStatus) => {
-    if (newStatus === 'DORMANT') {
+  const handleStatusChange = useCallback((podId: string, newStatus: string) => {
+    if (newStatus === 'NOMINAL') {
       localStorage.removeItem(`podOverride_${podId}`);
       setPodOverrides(prev => {
         const updated = { ...prev };
         delete updated[podId];
         return updated;
       });
+      // Explicitly pin NOMINAL so base WARNING/CRITICAL is not used again
+      localStorage.setItem(`podOverride_${podId}`, 'NOMINAL');
+      setPodOverrides(prev => ({ ...prev, [podId]: 'NOMINAL' }));
+      window.dispatchEvent(new Event('aeonguard:podOverride'));
     } else {
       localStorage.setItem(`podOverride_${podId}`, newStatus);
       setPodOverrides(prev => ({ ...prev, [podId]: newStatus }));
@@ -191,10 +313,10 @@ export default function PodsPage() {
       ALL: pods.length,
       NOMINAL: pods.filter(p => getEffectiveStatus(p) === 'NOMINAL').length,
       WARNING: pods.filter(p => getEffectiveStatus(p) === 'WARNING').length,
-      DORMANT: pods.filter(p => getEffectiveStatus(p) === 'DORMANT').length,
       CRITICAL: pods.filter(p => getEffectiveStatus(p) === 'CRITICAL').length,
       WAKING: pods.filter(p => getEffectiveStatus(p) === 'WAKING').length,
       AWAKE: pods.filter(p => getEffectiveStatus(p) === 'AWAKE').length,
+      OVERRIDDEN: pods.filter(p => getEffectiveStatus(p) === 'OVERRIDDEN').length,
     }),
     [pods, getEffectiveStatus]
   );
@@ -208,12 +330,21 @@ export default function PodsPage() {
   );
 
   const alertPods = useMemo(
-    () => pods.filter(p => {
-      const s = getEffectiveStatus(p);
-      return s === 'WARNING' || s === 'CRITICAL';
-    }),
+    () =>
+      pods.filter(p => {
+        const s = getEffectiveStatus(p);
+        return s === 'WARNING' || s === 'CRITICAL' || s === 'OVERRIDDEN';
+      }),
     [pods, getEffectiveStatus]
   );
+
+  const displayPods = useMemo(() => {
+    const withOverrides = pods.map(p => ({ ...p, status: getEffectiveStatus(p) }));
+    const nominal = withOverrides.find(p => p.status === 'NOMINAL');
+    const warning = withOverrides.find(p => p.status === 'WARNING');
+    const critical = withOverrides.find(p => p.status === 'CRITICAL');
+    return [nominal, warning, critical].filter(Boolean) as Pod[];
+  }, [pods, getEffectiveStatus]);
 
   useEffect(() => {
     let i = 0;
@@ -414,7 +545,7 @@ export default function PodsPage() {
   );
 
   const handleLogout = () => {
-    localStorage.removeItem('aeonguard_auth');
+    clearSessionDataForLogout();
     navigate('/');
   };
 
@@ -599,6 +730,19 @@ export default function PodsPage() {
                     AWAKE {counts.AWAKE}
                   </button>
                 )}
+                {counts.OVERRIDDEN > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilter('OVERRIDDEN')}
+                    className={`px-3 py-1.5 text-[clamp(0.55rem,0.65vw,0.7rem)] font-bold tracking-widest border transition-colors ${
+                      filter === 'OVERRIDDEN'
+                        ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+                        : 'bg-transparent border-violet-500/20 text-violet-500/50 hover:border-violet-500/40 hover:text-violet-300/80'
+                    }`}
+                  >
+                    OVERRIDDEN {counts.OVERRIDDEN}
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(70px,1fr))] gap-2">
                 {filteredPods.map(pod => {
@@ -654,8 +798,12 @@ export default function PodsPage() {
                   marginBottom: '16px',
                 }}>── HIBERNATION POD STATUS DISPLAY ──</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                  {[pods[0], pods[118], pods[125]].map(pod => (
-                    <HibernationPodVisual key={pod.id} pod={pod} effectiveStatus={getEffectiveStatus(pod)} />
+                  {displayPods.map(pod => (
+                    <HibernationPodVisual
+                      key={pod.id}
+                      pod={{ ...pod, status: getEffectiveStatus(pod) }}
+                      effectiveStatus={getEffectiveStatus(pod)}
+                    />
                   ))}
                 </div>
               </div>
@@ -689,8 +837,9 @@ export default function PodsPage() {
                 {[
                   { label: 'NOMINAL', color: '#00e5ff', op: 0.8 },
                   { label: 'WARNING', color: '#ffaa00', op: 0.8 },
-                  { label: 'DORMANT', color: '#1a3a5c', op: 0.5 },
                   { label: 'CRITICAL', color: '#ff3333', op: 0.8 },
+                  { label: 'WAKING', color: '#ff8800', op: 0.85 },
+                  { label: 'AWAKE', color: '#00ff88', op: 0.85 },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-1.5">
                     <div className="w-2 h-2" style={{ backgroundColor: s.color, opacity: s.op }} />
@@ -730,7 +879,7 @@ export default function PodsPage() {
                 <text x="10" y="141" fill="rgba(255,170,0,0.6)" fontSize="8" fontFamily="monospace">B4</text>
                 <text x="88" y="134" fill="rgba(0,229,255,0.3)" fontSize="7" fontFamily="monospace">███████████████████████</text>
                 <text x="268" y="134" fill="rgba(255,170,0,0.6)" fontSize="7" fontFamily="monospace">█████</text>
-                <text x="308" y="134" fill="rgba(100,150,255,0.4)" fontSize="7" fontFamily="monospace">██</text>
+                <text x="308" y="134" fill="rgba(0,229,255,0.25)" fontSize="7" fontFamily="monospace">██</text>
                 <text x="328" y="134" fill="rgba(255,50,50,0.7)" fontSize="7" fontFamily="monospace">██</text>
                 <text x="360" y="134" fill="rgba(255,170,0,0.5)" fontSize="7" fontFamily="monospace">32 PODS · 20°C · ⚠ 5 WARNING · 2 CRITICAL</text>
 
@@ -745,21 +894,32 @@ export default function PodsPage() {
                 { id: 'B1', label: '地下城 B1层 LEVEL B1', count: 32, pods: createFloorPods(1, 32, 'NOMINAL') },
                 { id: 'B2', label: '地下城 B2层 LEVEL B2', count: 31, pods: createFloorPods(33, 63, 'NOMINAL') },
                 { id: 'B3', label: '地下城 B3层 LEVEL B3', count: 32, pods: createFloorPods(64, 95, 'NOMINAL') },
-                { id: 'B4', label: '地下城 B4层 LEVEL B4', count: 32, pods: createFloorPods(96, 127, 'NOMINAL', { WARNING: 5, DORMANT: 2, CRITICAL: 2 }) },
+                { id: 'B4', label: '地下城 B4层 LEVEL B4', count: 32, pods: createFloorPods(96, 127, 'NOMINAL', { WARNING: 5, CRITICAL: 2 }) },
               ].map(floor => {
                 const stats = {
                   NOMINAL: floor.pods.filter(p => p === 'NOMINAL').length,
                   WARNING: floor.pods.filter(p => p === 'WARNING').length,
-                  DORMANT: floor.pods.filter(p => p === 'DORMANT').length,
                   CRITICAL: floor.pods.filter(p => p === 'CRITICAL').length,
+                  WAKING: floor.pods.filter(p => p === 'WAKING').length,
                 };
                 return (
                   <div key={floor.id} className="flex items-center gap-4 p-3 border border-cyan-500/10 bg-[#00101f]">
                     <div className="w-[200px] shrink-0 text-left text-[clamp(0.6rem,0.7vw,0.75rem)] tracking-[0.15em] text-cyan-400">{floor.label}</div>
                     <div className="flex flex-wrap gap-1 flex-1">
                       {floor.pods.map((status, idx) => {
-                        const color = status === 'NOMINAL' ? '#00e5ff' : status === 'WARNING' ? '#ffaa00' : status === 'CRITICAL' ? '#ff3333' : '#1a3a5c';
-                        return <div key={idx} className="w-[10px] h-[10px]" style={{ backgroundColor: color, opacity: status === 'DORMANT' ? 0.5 : 0.8 }} />;
+                        const color =
+                          status === 'NOMINAL'
+                            ? '#00e5ff'
+                            : status === 'WARNING'
+                              ? '#ffaa00'
+                              : status === 'CRITICAL'
+                                ? '#ff3333'
+                                : status === 'WAKING'
+                                  ? '#ff8800'
+                                  : '#00ff88';
+                        return (
+                          <div key={idx} className="w-[10px] h-[10px]" style={{ backgroundColor: color, opacity: 0.8 }} />
+                        );
                       })}
                     </div>
                     <div className="w-[1px] h-6 bg-cyan-500/15 shrink-0" />
@@ -767,8 +927,8 @@ export default function PodsPage() {
                       {[
                         { k: 'NOM', v: stats.NOMINAL, color: 'text-cyan-400' },
                         { k: 'WAR', v: stats.WARNING, color: 'text-amber-400' },
-                        { k: 'DOR', v: stats.DORMANT, color: 'text-blue-400/70' },
                         { k: 'CRI', v: stats.CRITICAL, color: 'text-red-400' },
+                        { k: 'WAK', v: stats.WAKING, color: 'text-orange-400' },
                       ].map((s, i) => (
                         <span key={s.k} className="flex items-center gap-1">
                           <span className="opacity-40">{s.k}:</span>
@@ -824,7 +984,7 @@ export default function PodsPage() {
                                 ? 'text-orange-400 border-orange-500/40 bg-orange-500/10'
                                 : st === 'AWAKE'
                                 ? 'text-green-400 border-green-500/40 bg-green-500/10'
-                                : 'text-blue-400/50 border-blue-500/20 bg-blue-500/5'
+                                : 'text-cyan-400/70 border-cyan-500/20 bg-cyan-500/5'
                             }`}
                           >
                             {st === 'WAKING' ? (
@@ -1237,12 +1397,10 @@ function createFloorPods(start: number, end: number, _defaultStatus: PodStatus, 
   const total = end - start + 1;
   const list: PodStatus[] = [];
   const warn = overrides?.WARNING || 0;
-  const dorm = overrides?.DORMANT || 0;
   const crit = overrides?.CRITICAL || 0;
-  const nominal = total - warn - dorm - crit;
+  const nominal = total - warn - crit;
   list.push(...Array(nominal).fill('NOMINAL'));
   list.push(...Array(warn).fill('WARNING'));
-  list.push(...Array(dorm).fill('DORMANT'));
   list.push(...Array(crit).fill('CRITICAL'));
   return list.slice(0, total);
 }
@@ -1259,17 +1417,18 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
     NOMINAL:  { primary: '#00e5ff', secondary: '#004466', glow: 'rgba(0,229,255,0.2)',  bg: 'rgba(0,8,20,0.95)'  },
     WARNING:  { primary: '#ffaa00', secondary: '#442200', glow: 'rgba(255,170,0,0.25)', bg: 'rgba(10,5,0,0.95)'  },
     CRITICAL: { primary: '#ff3333', secondary: '#440000', glow: 'rgba(255,50,50,0.35)', bg: 'rgba(15,0,0,0.95)'  },
-    DORMANT:  { primary: '#3355aa', secondary: '#001133', glow: 'rgba(50,80,180,0.15)', bg: 'rgba(0,3,12,0.95)'  },
     WAKING:   { primary: '#ff8800', secondary: '#331a00', glow: 'rgba(255,140,0,0.4)', bg: 'rgba(25,12,0,0.95)'  },
     AWAKE:    { primary: '#00ff88', secondary: '#003322', glow: 'rgba(0,255,136,0.35)', bg: 'rgba(0,20,12,0.95)'  },
+    OVERRIDDEN: { primary: '#b388ff', secondary: '#2a1a44', glow: 'rgba(179,136,255,0.3)', bg: 'rgba(20,8,32,0.95)' },
   };
   const status = effectiveStatus;
   const t = theme[status];
   const isCritical = status === 'CRITICAL';
   const isWarning = status === 'WARNING';
-  const isDormant = status === 'DORMANT';
+  const isNominal = status === 'NOMINAL';
   const isWaking = status === 'WAKING';
   const isAwake = status === 'AWAKE';
+  const isOverridden = status === 'OVERRIDDEN';
 
   return (
     <div style={{
@@ -1279,15 +1438,15 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
       boxShadow: `0 0 30px ${t.glow}, inset 0 0 40px ${t.secondary}`,
       position: 'relative',
       overflow: 'hidden',
-      animation: isCritical ? 'podPulse 0.8s infinite' : isWarning ? 'podPulse 2.5s infinite' : isWaking ? 'podPulse 1.2s infinite' : isAwake ? 'podGlow 3s ease-in-out infinite' : isDormant ? 'none' : 'podGlow 5s ease-in-out infinite',
+      animation: isCritical ? 'podPulse 0.8s infinite' : isWarning || isOverridden ? 'podPulse 2.5s infinite' : isWaking ? 'podPulse 1.2s infinite' : isAwake ? 'podGlow 3s ease-in-out infinite' : 'podGlow 5s ease-in-out infinite',
     }}>
       <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', opacity: isDormant ? 0.1 : 0.2,
+        position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', opacity: 0.2,
       }}>
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, ${t.primary}08 3px, ${t.primary}08 4px)`,
-          animation: isDormant ? 'none' : 'scanlines 8s linear infinite',
+          animation: 'scanlines 8s linear infinite',
         }} />
       </div>
 
@@ -1305,20 +1464,17 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
         {isWaking && (
           <Loader2 size={12} className="text-orange-400 animate-spin shrink-0" aria-hidden />
         )}
-        {(isWarning || isCritical) && (
+        {(isWarning || isCritical || isOverridden) && (
           <span style={{ fontSize: '11px', animation: 'blink 1s infinite' }}>⚠</span>
-        )}
-        {isDormant && (
-          <span style={{ fontSize: '8px', fontFamily: 'monospace', color: t.primary, opacity: 0.5, letterSpacing: '0.15em' }}>SEALED</span>
         )}
       </div>
 
       <div style={{ height: '90px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          height: isDormant ? '70%' : '45%',
+          height: '45%',
           background: `linear-gradient(180deg, transparent, ${t.primary}12, ${t.primary}25)`,
-          animation: isDormant ? 'none' : 'liquidRise 4s ease-in-out infinite alternate',
+          animation: 'liquidRise 4s ease-in-out infinite alternate',
         }} />
 
         <div style={{
@@ -1330,7 +1486,7 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
 
         <svg width="45" height="85" viewBox="0 0 45 85"
           style={{
-            position: 'relative', zIndex: 1, opacity: isDormant ? 0.4 : 0.85,
+            position: 'relative', zIndex: 1, opacity: 0.85,
             transform: isCritical ? 'rotate(-3deg)' : 'none',
             filter: `drop-shadow(0 0 5px ${t.primary})`,
           }}>
@@ -1341,14 +1497,14 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
           <path d="M 31.5 33 Q 39 43.5 40.5 52.5" fill="none" stroke={t.primary} strokeWidth="1.2" opacity="0.6" />
           <path d="M 18 60 Q 15 75 14.25 85.5" fill="none" stroke={t.primary} strokeWidth="1.2" opacity="0.6" />
           <path d="M 27 60 Q 30 75 30.75 85.5" fill="none" stroke={t.primary} strokeWidth="1.2" opacity="0.6" />
-          {(status === 'NOMINAL' || isDormant || isAwake) && (
+          {(isNominal || isAwake) && (
             <>
               <line x1="16.5" y1="37.5" x2="19.5" y2="43.5" stroke={`${t.primary}50`} strokeWidth="0.5" />
               <line x1="25.5" y1="34.5" x2="28.5" y2="40.5" stroke={`${t.primary}50`} strokeWidth="0.5" />
               <line x1="19.5" y1="48" x2="22.5" y2="54" stroke={`${t.primary}50`} strokeWidth="0.5" />
             </>
           )}
-          {(isWarning || isCritical) && (
+          {(isWarning || isCritical || isOverridden) && (
             <>
               <circle cx="18" cy="39" r="1.5" fill={t.primary} opacity="0.8" />
               <circle cx="27" cy="39" r="1.5" fill={t.primary} opacity="0.8" />
@@ -1364,9 +1520,9 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
         display: 'flex', justifyContent: 'space-between',
         background: `linear-gradient(90deg, ${t.secondary}80, transparent)`,
       }}>
-        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#00e5ff', opacity: isDormant ? 0.4 : 0.9 }}>♥ {pod.heartRate}</span>
-        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#ffaa00', opacity: isDormant ? 0.4 : 0.9 }}>{pod.temperature}°C</span>
-        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#00ff88', opacity: isDormant ? 0.4 : 0.9 }}>{pod.metabolism}%</span>
+        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#00e5ff', opacity: 0.9 }}>♥ {pod.heartRate}</span>
+        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#ffaa00', opacity: 0.9 }}>{pod.temperature}°C</span>
+        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#00ff88', opacity: 0.9 }}>{pod.metabolism}%</span>
       </div>
 
       <div style={{ borderTop: `1px solid ${t.primary}15` }}>
@@ -1377,7 +1533,7 @@ function HibernationPodVisual({ pod, effectiveStatus }: { pod: Pod; effectiveSta
         padding: '3px 8px',
         borderTop: `1px solid ${t.primary}15`,
         fontSize: '8px', fontFamily: 'monospace',
-        color: t.primary, opacity: isDormant ? 0.4 : 0.7,
+        color: t.primary, opacity: 0.7,
         letterSpacing: '0.15em', textAlign: 'center',
         background: `linear-gradient(90deg, transparent, ${t.secondary}60, transparent)`,
       }}>
@@ -1400,9 +1556,22 @@ function EcgCanvas({ status }: { status: PodStatus }) {
     let t = Math.random() * 200;
     let animId = 0;
     const isActive =
-      status === 'WARNING' || status === 'CRITICAL' || status === 'NOMINAL' || status === 'WAKING' || status === 'AWAKE';
+      status === 'WARNING' ||
+      status === 'CRITICAL' ||
+      status === 'NOMINAL' ||
+      status === 'WAKING' ||
+      status === 'AWAKE' ||
+      status === 'OVERRIDDEN';
     const speed =
-      status === 'CRITICAL' ? 3 : status === 'WARNING' ? 2 : status === 'WAKING' ? 2.2 : status === 'AWAKE' ? 1.6 : 1.4;
+      status === 'CRITICAL'
+        ? 3
+        : status === 'WARNING' || status === 'OVERRIDDEN'
+          ? 2
+          : status === 'WAKING'
+            ? 2.2
+            : status === 'AWAKE'
+              ? 1.6
+              : 1.4;
     const color =
       status === 'CRITICAL'
         ? '#ff4444'
@@ -1412,12 +1581,15 @@ function EcgCanvas({ status }: { status: PodStatus }) {
             ? '#ff8800'
             : status === 'AWAKE'
               ? '#00ff88'
-              : 'rgba(0,229,255,0.35)';
+              : status === 'OVERRIDDEN'
+                ? '#b388ff'
+                : 'rgba(0,229,255,0.35)';
     const draw = () => {
       t += speed;
       let y: number;
-      if (status === 'CRITICAL' || status === 'WARNING' || status === 'WAKING') {
-        const period = status === 'CRITICAL' ? 40 : status === 'WAKING' ? 50 : 60;
+      if (status === 'CRITICAL' || status === 'WARNING' || status === 'WAKING' || status === 'OVERRIDDEN') {
+        const period =
+          status === 'CRITICAL' ? 40 : status === 'WAKING' ? 50 : status === 'OVERRIDDEN' ? 58 : 60;
         const phase = t % period;
         if (phase < 2) y = h / 2;
         else if (phase < 4) y = h / 2 - h * 0.38;
@@ -1488,8 +1660,9 @@ function RightPanel({
           {[
             { label: 'NOMINAL', count: counts.NOMINAL, color: 'text-cyan-400' },
             { label: 'WARNING', count: counts.WARNING, color: 'text-amber-400' },
-            { label: 'DORMANT', count: counts.DORMANT, color: 'text-blue-400' },
             { label: 'CRITICAL', count: counts.CRITICAL, color: 'text-red-400' },
+            { label: 'WAKING', count: counts.WAKING, color: 'text-orange-400' },
+            { label: 'AWAKE', count: counts.AWAKE, color: 'text-green-400' },
           ].map(row => (
             <div key={row.label} className="flex items-center gap-3 text-[clamp(0.55rem,0.65vw,0.7rem)] tracking-widest font-mono">
               <span className={`w-20 ${row.color}`}>{row.label}:</span>
@@ -1535,18 +1708,29 @@ function RightPanel({
           {alertPods.map(pod => {
             const st = getStatus(pod);
             const isCritical = st === 'CRITICAL';
+            const isOverridden = st === 'OVERRIDDEN';
             return (
               <button
                 key={pod.id}
                 onClick={() => onSelectPod(pod)}
                 className={`w-full text-left flex items-center justify-between px-2 py-1.5 text-[clamp(0.5rem,0.6vw,0.65rem)] tracking-widest transition-colors hover:bg-cyan-500/5 ${
-                  isCritical ? 'border-l-2 border-red-500 animate-pulse' : ''
+                  isCritical ? 'border-l-2 border-red-500 animate-pulse' : isOverridden ? 'border-l-2 border-violet-500' : ''
                 }`}
-                style={isCritical ? { background: 'rgba(255,0,0,0.05)' } : undefined}
+                style={
+                  isCritical
+                    ? { background: 'rgba(255,0,0,0.05)' }
+                    : isOverridden
+                      ? { background: 'rgba(120,50,200,0.08)' }
+                      : undefined
+                }
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span>{isCritical ? '🔴' : '⚠'}</span>
-                  <span className={`font-bold ${isCritical ? 'text-red-400' : 'text-amber-400'}`}>{pod.id}</span>
+                  <span>{isCritical ? '🔴' : isOverridden ? '⛔' : '⚠'}</span>
+                  <span
+                    className={`font-bold ${isCritical ? 'text-red-400' : isOverridden ? 'text-violet-300' : 'text-amber-400'}`}
+                  >
+                    {pod.id}
+                  </span>
                   <span className="opacity-40 truncate">{pod.name}</span>
                 </div>
                 <span className="opacity-50 whitespace-nowrap ml-2">{alertDescriptions[pod.id] || st}</span>
@@ -1586,15 +1770,17 @@ function PodDetail({
 }: {
   pod: Pod;
   vitalsHistory: Array<{ hour: string; hr: number; temp: number; meta: number }>;
-  onStatusChange: (podId: string, newStatus: PodStatus) => void;
+  onStatusChange: (podId: string, newStatus: string) => void;
 }) {
+  const navigate = useNavigate();
+  const effectiveStatus = pod.status;
   const statusColor: Record<PodStatus, string> = {
     NOMINAL: 'text-cyan-400 bg-cyan-500/15 border-cyan-500/30',
     WARNING: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
-    DORMANT: 'text-blue-400 bg-blue-500/15 border-blue-500/30',
     CRITICAL: 'text-red-400 bg-red-500/15 border-red-500/30',
     WAKING: 'text-orange-400 bg-orange-500/15 border-orange-500/30 font-bold animate-pulse',
     AWAKE: 'text-green-400 bg-green-500/15 border-green-500/30 font-bold',
+    OVERRIDDEN: 'text-violet-300 bg-violet-500/15 border-violet-500/35 font-bold',
   };
   const vitalBar = (value: number, max: number, color: string) => {
     const pct = Math.min(100, (value / max) * 100);
@@ -1618,7 +1804,11 @@ function PodDetail({
         </div>
         <div className="flex justify-between items-center">
           <span className="opacity-40">STATUS</span>
-          <span className={`px-2 py-0.5 text-[clamp(0.5rem,0.55vw,0.6rem)] font-bold tracking-widest border ${statusColor[pod.status]}`}>{pod.status}</span>
+          <span
+            className={`px-2 py-0.5 text-[clamp(0.5rem,0.55vw,0.6rem)] font-bold tracking-widest border ${statusColor[effectiveStatus]}`}
+          >
+            {effectiveStatus}
+          </span>
         </div>
       </div>
       <div className="h-[1px] w-full bg-cyan-500/10" />
@@ -1686,19 +1876,55 @@ function PodDetail({
           </div>
         </div>
       </div>
-      {pod.status === 'WAKING' && (
-        <div
+
+      {(effectiveStatus === 'WARNING' || effectiveStatus === 'CRITICAL') && (
+        <button
+          type="button"
+          onClick={() => {
+            const crisisType = effectiveStatus === 'CRITICAL' ? 'oxygen' : 'pressure';
+            localStorage.setItem('activeCrisisType', crisisType);
+            localStorage.setItem('activeCrisisLocation', `SECTOR ${pod.id}`);
+            localStorage.setItem(
+              'activeCrisisLabel',
+              effectiveStatus === 'CRITICAL' ? 'CRITICAL BIO FAILURE' : 'WARNING BIO ANOMALY'
+            );
+            // Pass THIS pod as the recommended pod — not someone else (C1 / Pods flow)
+            localStorage.setItem('recommendedPod', pod.id);
+            localStorage.setItem('recommendedPerson', pod.name);
+            localStorage.setItem('recommendedRole', pod.role);
+            navigate('/dashboard/ai');
+          }}
           style={{
-            padding: '12px',
-            border: '1px solid rgba(255,140,0,0.4)',
-            background: 'rgba(255,140,0,0.05)',
+            width: '100%',
+            padding: '10px',
             marginTop: '12px',
+            background: effectiveStatus === 'CRITICAL' ? 'rgba(255,50,50,0.1)' : 'rgba(255,170,0,0.1)',
+            border: `1px solid ${effectiveStatus === 'CRITICAL' ? '#ff4444' : '#ffaa00'}`,
+            color: effectiveStatus === 'CRITICAL' ? '#ff4444' : '#ffaa00',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            letterSpacing: '0.2em',
+            cursor: 'pointer',
+            animation: 'podPulse 2s infinite',
           }}
         >
-          <div style={{ fontSize: '10px', color: '#ffaa00', letterSpacing: '0.2em', marginBottom: '8px' }}>
-            ── WAKING SEQUENCE IN PROGRESS ──
+          ◈ VIEW AI ANALYSIS · SEND TO ENGINE →
+        </button>
+      )}
+
+      {effectiveStatus === 'WAKING' && (
+        <div style={{ marginTop: '12px' }}>
+          <div
+            style={{
+              fontSize: '9px',
+              color: '#ffaa00',
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              marginBottom: '8px',
+            }}
+          >
+            ── WAKE SEQUENCE AUTHORIZED BY ADMIN ──
           </div>
-          <div style={{ fontSize: '9px', opacity: 0.5, marginBottom: '8px' }}>解冻程序进行中 · 预计需要 45 分钟</div>
           <button
             type="button"
             onClick={() => onStatusChange(pod.id, 'AWAKE')}
@@ -1713,27 +1939,27 @@ function PodDetail({
               letterSpacing: '0.2em',
             }}
           >
-            ✓ CONFIRM AWAKE
+            ✓ CONFIRM AWAKE · WAKE OCCUPANT
           </button>
         </div>
       )}
 
-      {pod.status === 'AWAKE' && (
-        <div
-          style={{
-            padding: '12px',
-            border: '1px solid rgba(0,255,136,0.3)',
-            background: 'rgba(0,255,136,0.03)',
-            marginTop: '12px',
-          }}
-        >
-          <div style={{ fontSize: '10px', color: '#00ff88', letterSpacing: '0.2em', marginBottom: '8px' }}>
+      {effectiveStatus === 'AWAKE' && (
+        <div style={{ marginTop: '12px' }}>
+          <div
+            style={{
+              fontSize: '9px',
+              color: '#00ff88',
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              marginBottom: '8px',
+            }}
+          >
             ── CURRENTLY ON DUTY ──
           </div>
-          <div style={{ fontSize: '9px', opacity: 0.5, marginBottom: '12px' }}>Mission in progress · return to hibernation when complete</div>
           <button
             type="button"
-            onClick={() => onStatusChange(pod.id, 'DORMANT')}
+            onClick={() => onStatusChange(pod.id, 'NOMINAL')}
             style={{
               width: '100%',
               padding: '10px',
@@ -1743,41 +1969,53 @@ function PodDetail({
               fontFamily: 'monospace',
               cursor: 'pointer',
               letterSpacing: '0.2em',
-              marginBottom: '8px',
             }}
           >
-            ↩ RETURN TO HIBERNATION
-          </button>
-          <div style={{ fontSize: '8px', opacity: 0.3, textAlign: 'center' }}>Status resets to DORMANT after return</div>
-        </div>
-      )}
-
-      {pod.status === 'DORMANT' && (
-        <div className="pt-2">
-          <button
-            type="button"
-            disabled
-            style={{ opacity: 0.5, cursor: 'not-allowed' }}
-            className="w-full py-2.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[clamp(0.6rem,0.7vw,0.75rem)] font-bold tracking-[0.2em]"
-          >
-            WAKE OCCUPANT · Requires AI Authorization
+            ↩ RETURN TO NOMINAL
           </button>
         </div>
       )}
 
-      {pod.status !== 'WAKING' && pod.status !== 'AWAKE' && pod.status !== 'DORMANT' && (
-        <div className="relative group/wake pt-2">
-          <button
-            type="button"
-            disabled
-            className="w-full py-2.5 border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[clamp(0.6rem,0.7vw,0.75rem)] font-bold tracking-[0.2em] opacity-50 cursor-not-allowed"
-          >
-            WAKE OCCUPANT
-          </button>
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-[#000d1a] border border-amber-500/30 text-[clamp(0.5rem,0.55vw,0.6rem)] text-amber-400 tracking-widest whitespace-nowrap opacity-0 group-hover/wake:opacity-100 transition-opacity pointer-events-none">
-            Requires AI Authorization
-          </div>
-        </div>
+      {effectiveStatus === 'OVERRIDDEN' && (
+        <button
+          type="button"
+          disabled
+          style={{
+            width: '100%',
+            padding: '10px',
+            marginTop: '12px',
+            background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: 'rgba(255,255,255,0.2)',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            letterSpacing: '0.2em',
+            cursor: 'not-allowed',
+          }}
+        >
+          WAKE OCCUPANT · Override in Effect
+        </button>
+      )}
+
+      {effectiveStatus === 'NOMINAL' && (
+        <button
+          type="button"
+          disabled
+          style={{
+            width: '100%',
+            padding: '10px',
+            marginTop: '12px',
+            background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: 'rgba(255,255,255,0.2)',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            letterSpacing: '0.2em',
+            cursor: 'not-allowed',
+          }}
+        >
+          WAKE OCCUPANT · Requires AI Authorization
+        </button>
       )}
     </div>
   );

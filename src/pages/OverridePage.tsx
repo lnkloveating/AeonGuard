@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Terminal,
@@ -53,150 +54,17 @@ export interface Decision {
   riskDescription: string[];
 }
 
-const initialDecisions: Decision[] = [
-  {
-    id: 'DEC-001',
-    crisisType: 'oxygen',
-    crisisLabel: 'OXYGEN DEPLETION',
-    location: 'SECTOR B1-R2',
-    recommendedPerson: 'CHEN_WEI',
-    recommendedPod: 'POD-047',
-    role: 'Life Support Engineer',
-    score: 93.6,
-    bioScore: 94,
-    skillScore: 98,
-    equityScore: 87,
-    triggeredAt: '2 MIN AGO',
-    status: 'PENDING',
-    riskLevel: 'CRITICAL',
-    timeToFailure: '01:30:00',
-    affectedPopulation: 2400,
-    riskDescription: [
-      'B1-R2 O₂ at 71.3% — below 78% alert threshold',
-      'Sector depletion estimated within 1.5 hours',
-      'Residential B: ~2,400 residents affected',
-      'No alternative candidate matches CHEN_WEI',
-      'Forced evacuation protocol if unaddressed',
-    ],
-  },
-  {
-    id: 'DEC-002',
-    crisisType: 'radiation',
-    crisisLabel: 'RADIATION SURGE',
-    location: 'SECTOR B3-E1',
-    recommendedPerson: 'YANOV_K',
-    recommendedPod: 'POD-023',
-    role: 'Nuclear Engineer',
-    score: 94.4,
-    bioScore: 91,
-    skillScore: 97,
-    equityScore: 95,
-    triggeredAt: '6 MIN AGO',
-    status: 'PENDING',
-    riskLevel: 'HIGH',
-    timeToFailure: '03:00:00',
-    affectedPopulation: 800,
-    riskDescription: [
-      'B3-E1 radiation 89.3 mSv and rising',
-      'May exceed 100 mSv safe limit within 3 hours',
-      'Energy sector A: ~800 personnel exposed',
-      'Zone lockdown auto-triggers if threshold exceeded',
-      'Power output may drop 15–20%',
-    ],
-  },
-  {
-    id: 'DEC-003',
-    crisisType: 'power',
-    crisisLabel: 'POWER SYSTEM FAILURE',
-    location: 'SECTOR B3-E2',
-    recommendedPerson: 'GARCIA_M',
-    recommendedPod: 'POD-067',
-    role: 'Systems Engineer',
-    score: 87.8,
-    bioScore: 85,
-    skillScore: 94,
-    equityScore: 82,
-    triggeredAt: '15 MIN AGO',
-    status: 'PENDING',
-    riskLevel: 'CRITICAL',
-    timeToFailure: '00:45:00',
-    affectedPopulation: 1200,
-    riskDescription: [
-      'B3-E2 main power bus offline',
-      'Full B3 deck power at risk within 45 minutes',
-      'Industrial + energy zones: ~1,200 people',
-      'Backup supplies ~30 minutes remaining',
-      'GARCIA_M is the only qualified systems engineer',
-    ],
-  },
-  {
-    id: 'DEC-004',
-    crisisType: 'pressure',
-    crisisLabel: 'PRESSURE ANOMALY',
-    location: 'SECTOR B2-I1',
-    recommendedPerson: 'SMITH_J',
-    recommendedPod: 'POD-041',
-    role: 'Structural Engineer',
-    score: 92.8,
-    bioScore: 88,
-    skillScore: 96,
-    equityScore: 91,
-    triggeredAt: '1 HR AGO',
-    status: 'PENDING',
-    riskLevel: 'HIGH',
-    timeToFailure: '04:00:00',
-    affectedPopulation: 600,
-    riskDescription: [
-      'B2-I1 pressure dropped to 98.2 kPa',
-      'Below nominal band 95–110 kPa',
-      'Industrial A: ~600 workers affected',
-      'Structural fatigue risk if pressure falls further',
-      'SMITH_J holds highest structural score',
-    ],
-  },
-  {
-    id: 'DEC-005',
-    crisisType: 'oxygen',
-    crisisLabel: 'OXYGEN DEPLETION',
-    location: 'SECTOR B4-C1',
-    recommendedPerson: 'ZHANG_LI',
-    recommendedPod: 'POD-011',
-    role: 'Life Support Engineer',
-    score: 85.1,
-    bioScore: 76,
-    skillScore: 95,
-    equityScore: 78,
-    triggeredAt: '2 HR AGO',
-    status: 'ACCEPTED',
-    riskLevel: 'CRITICAL',
-    timeToFailure: 'RESOLVED',
-    affectedPopulation: 400,
-    riskDescription: [
-      'B4-C1 core zone O₂ supply anomaly',
-      'AI routed to ZHANG_LI',
-      'Decision accepted and executed',
-    ],
-  },
-  {
-    id: 'DEC-006',
-    crisisType: 'radiation',
-    crisisLabel: 'RADIATION SURGE',
-    location: 'SECTOR B3-E2',
-    recommendedPerson: 'MÜLLER_H',
-    recommendedPod: 'POD-089',
-    role: 'Geologist',
-    score: 83.6,
-    bioScore: 89,
-    skillScore: 82,
-    equityScore: 78,
-    triggeredAt: '5 HR AGO',
-    status: 'OVERRIDDEN',
-    riskLevel: 'HIGH',
-    timeToFailure: 'RESOLVED',
-    affectedPopulation: 500,
-    riskDescription: ['Administrator overrode AI recommendation', 'Manual specialist assignment'],
-  },
-];
+export interface HistoryEntry {
+  id: string;
+  time: string;
+  crisis: string;
+  crisisType?: Decision['crisisType'];
+  person: string;
+  score: number;
+  action: 'ACCEPTED' | 'OVERRIDDEN';
+  admin: string;
+  recordedAt?: string;
+}
 
 function parseHmsToSeconds(hms: string): number {
   const p = hms.split(':').map(Number);
@@ -261,20 +129,7 @@ export default function OverridePage() {
   const [titleDone, setTitleDone] = useState(false);
   const fullTitle = 'HUMAN OVERRIDE INTERFACE';
 
-  const [decisions, setDecisions] = useState<Decision[]>(() => {
-    try {
-      const saved = localStorage.getItem('overrideDecisions');
-      if (saved) {
-        const parsed = JSON.parse(saved) as unknown;
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as Decision[];
-        }
-      }
-    } catch {
-      /* invalid JSON — use defaults */
-    }
-    return initialDecisions;
-  });
+  const [decisions, setDecisions] = useState<Decision[]>([]);
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [failureSeconds, setFailureSeconds] = useState(0);
 
@@ -284,67 +139,161 @@ export default function OverridePage() {
   const riskScrollRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [history, setHistory] = useState([
-    { id: 'DEC-098', time: '2H AGO', crisis: 'OXYGEN DEPLETION', person: 'CHEN_WEI', score: 93.6, action: 'ACCEPTED' as const, admin: 'ADMIN_01' },
-    { id: 'DEC-097', time: '6H AGO', crisis: 'RADIATION SURGE', person: 'YANOV_K', score: 94.4, action: 'ACCEPTED' as const, admin: 'ADMIN_01' },
-    { id: 'DEC-096', time: '1D AGO', crisis: 'POWER FAILURE', person: 'GARCIA_M', score: 87.8, action: 'OVERRIDDEN' as const, admin: 'ADMIN_01' },
-    { id: 'DEC-095', time: '3D AGO', crisis: 'PRESSURE ANOMALY', person: 'SMITH_J', score: 92.8, action: 'ACCEPTED' as const, admin: 'OPERATOR_01' },
-    { id: 'DEC-094', time: '7D AGO', crisis: 'OXYGEN DEPLETION', person: 'ZHANG_LI', score: 86.4, action: 'ACCEPTED' as const, admin: 'ADMIN_01' },
-  ]);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('decisionHistory');
+      if (saved) {
+        const parsed = JSON.parse(saved) as unknown;
+        if (Array.isArray(parsed)) return parsed as HistoryEntry[];
+      }
+    } catch {
+      /* noop */
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('decisionHistory', JSON.stringify(history));
+    } catch {
+      /* noop */
+    }
+  }, [history]);
+
+  const isCrisisType = (v: unknown): v is Decision['crisisType'] =>
+    v === 'oxygen' || v === 'radiation' || v === 'power' || v === 'pressure';
+
+  const loadNewDecisions = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('pendingDecisions') || '[]';
+      const stored = JSON.parse(raw) as unknown[];
+      if (!Array.isArray(stored)) return;
+      const pending = stored.filter(
+        (d): d is Record<string, unknown> => typeof d === 'object' && d !== null && d.status === 'PENDING'
+      );
+      if (pending.length === 0) return;
+      setDecisions(prev => {
+        const existingIds = new Set(prev.map(d => d.id));
+        const newOnes: Decision[] = pending
+          .filter(
+            d =>
+              typeof d['id'] === 'string' &&
+              !existingIds.has(d['id'] as string)
+          )
+          .map(d => {
+            const id = d['id'] as string;
+            const crisisType = isCrisisType(d.crisisType) ? d.crisisType : 'oxygen';
+            const recPer = String(d['recommendedPerson'] ?? '');
+            const recPod = String(d['recommendedPod'] ?? '');
+            return {
+              id,
+              crisisType,
+              crisisLabel: String(d['crisisLabel'] ?? ''),
+              location: String(d['location'] ?? ''),
+              recommendedPerson: recPer,
+              recommendedPod: recPod,
+              role: String((d['role'] as string) || 'Specialist'),
+              score: Number(d['score'] ?? 0),
+              bioScore: Number((d as { bioScore?: number }).bioScore ?? 85),
+              skillScore: Number((d as { skillScore?: number }).skillScore ?? 90),
+              equityScore: Number((d as { equityScore?: number }).equityScore ?? 85),
+              triggeredAt: String((d as { triggeredAt?: string }).triggeredAt || 'Just now'),
+              status: 'PENDING' as const,
+              riskLevel: ((d as { riskLevel?: Decision['riskLevel'] }).riskLevel || 'HIGH') as Decision['riskLevel'],
+              timeToFailure: String((d as { timeToFailure?: string }).timeToFailure || '02:00:00'),
+              affectedPopulation: Number((d as { affectedPopulation?: number }).affectedPopulation ?? 1),
+              riskDescription: Array.isArray((d as { riskDescription?: unknown }).riskDescription)
+                ? (d as { riskDescription: unknown[] }).riskDescription.map(x => String(x))
+                : [
+                    `${recPer} in ${recPod} requires attention`,
+                    `AI recommends immediate wake sequence`,
+                    `Composite score: ${d['score']}/100`,
+                  ],
+            };
+          });
+        if (newOnes.length === 0) return prev;
+        return [...newOnes, ...prev];
+      });
+    } catch (e) {
+      console.error('Failed to load decisions:', e);
+    }
+  }, []);
 
   const selectedDecision = decisions.find(d => d.id === selectedDecisionId) ?? null;
 
   const pendingCount = useMemo(() => decisions.filter(d => d.status === 'PENDING').length, [decisions]);
 
   const stats = useMemo(() => {
-    const total = decisions.length + history.length;
-    const accepted =
-      decisions.filter(d => d.status === 'ACCEPTED').length + history.filter(h => h.action === 'ACCEPTED').length;
-    const overridden =
-      decisions.filter(d => d.status === 'OVERRIDDEN').length + history.filter(h => h.action === 'OVERRIDDEN').length;
+    const allAccepted = history.filter(h => h.action === 'ACCEPTED').length;
+    const allOverridden = history.filter(h => h.action === 'OVERRIDDEN').length;
     const pending = decisions.filter(d => d.status === 'PENDING').length;
-    const acceptRate = total > 0 ? ((accepted / total) * 100).toFixed(1) : '0';
-    const overrideRate = total > 0 ? ((overridden / total) * 100).toFixed(1) : '0';
-    return { total, accepted, overridden, pending, acceptRate, overrideRate };
+    const total = allAccepted + allOverridden + pending;
+    const resolved = allAccepted + allOverridden;
+    return {
+      total,
+      accepted: allAccepted,
+      overridden: allOverridden,
+      pending,
+      acceptRate:
+        resolved > 0 ? ((allAccepted / resolved) * 100).toFixed(1) : '0.0',
+      overrideRate:
+        resolved > 0 ? ((allOverridden / resolved) * 100).toFixed(1) : '0.0',
+    };
   }, [decisions, history]);
 
-  const responseTimeData = useMemo(
-    () => [
-      { id: 'DEC-091', time: 2.1 },
-      { id: 'DEC-092', time: 3.4 },
-      { id: 'DEC-093', time: 1.8 },
-      { id: 'DEC-094', time: 4.2 },
-      { id: 'DEC-095', time: 2.9 },
-      { id: 'DEC-096', time: 5.1 },
-      { id: 'DEC-097', time: 2.3 },
-      { id: 'DEC-098', time: 3.7 },
-      { id: 'DEC-099', time: 1.5 },
-      { id: 'DEC-100', time: 3.2 },
-    ],
-    []
-  );
+  const responseTimeData = useMemo(() => {
+    if (history.length < 2) return [] as { id: string; time: number }[];
+    const withTs = history.filter((h): h is HistoryEntry & { recordedAt: string } => Boolean(h.recordedAt));
+    if (withTs.length < 2) return [] as { id: string; time: number }[];
+    const chrono = [...withTs].sort(
+      (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
+    );
+    return chrono.slice(1).map((h, i) => {
+      const prev = chrono[i];
+      const deltaMs = new Date(h.recordedAt).getTime() - new Date(prev.recordedAt).getTime();
+      return { id: h.id, time: Math.round((Math.max(0, deltaMs) / 60000) * 100) / 100 };
+    });
+  }, [history]);
 
   const avgResponseMinutes = useMemo(
-    () => responseTimeData.reduce((s, x) => s + x.time, 0) / responseTimeData.length,
+    () =>
+      responseTimeData.length
+        ? responseTimeData.reduce((s, x) => s + x.time, 0) / responseTimeData.length
+        : 0,
     [responseTimeData]
   );
 
+  const rowsByCrisis = useMemo(() => {
+    const m = new Map<string, Decision | HistoryEntry>();
+    decisions.forEach(d => m.set(d.id, d));
+    history.forEach(h => {
+      if (!m.has(h.id)) m.set(h.id, h);
+    });
+    return Array.from(m.values());
+  }, [decisions, history]);
+
   const crisisStats = useMemo(
-    () => [
-      { type: 'OXYGEN', count: decisions.filter(d => d.crisisType === 'oxygen').length + 2 },
-      { type: 'RADIATION', count: decisions.filter(d => d.crisisType === 'radiation').length + 2 },
-      { type: 'POWER', count: decisions.filter(d => d.crisisType === 'power').length + 1 },
-      { type: 'PRESSURE', count: decisions.filter(d => d.crisisType === 'pressure').length + 1 },
-    ],
-    [decisions]
+    () =>
+      (['oxygen', 'radiation', 'power', 'pressure'] as const)
+        .map(type => ({
+          type: type.toUpperCase(),
+          count: rowsByCrisis.filter(d => {
+            if ('crisisType' in d && d.crisisType === type) return true;
+            const label = 'crisisLabel' in d ? d.crisisLabel : d.crisis;
+            return label.toLowerCase().includes(type);
+          }).length,
+        }))
+        .filter(d => d.count > 0),
+    [rowsByCrisis]
   );
 
-  const pieSlices = useMemo(
-    () => [
-      { name: 'ACCEPTED', value: stats.accepted, color: '#00ff88' },
-      { name: 'OVERRIDDEN', value: stats.overridden, color: '#ffaa00' },
-      { name: 'PENDING', value: stats.pending, color: '#ff4444' },
-    ],
+  const pieData = useMemo(
+    () =>
+      [
+        { name: 'ACCEPTED', value: stats.accepted, color: '#00ff88' },
+        { name: 'OVERRIDDEN', value: stats.overridden, color: '#ffaa00' },
+        { name: 'PENDING', value: stats.pending, color: '#ff4444' },
+      ].filter(d => d.value > 0),
     [stats]
   );
 
@@ -366,21 +315,6 @@ export default function OverridePage() {
     };
   }, [decisions]);
 
-  const pushHistory = (dec: Decision, action: 'ACCEPTED' | 'OVERRIDDEN') => {
-    setHistory(h => [
-      {
-        id: dec.id,
-        time: 'NOW',
-        crisis: dec.crisisLabel,
-        person: dec.recommendedPerson,
-        score: dec.score,
-        action,
-        admin: 'ADMIN_01',
-      },
-      ...h,
-    ]);
-  };
-
   const handleOverrideClick = (dec: Decision) => {
     setSelectedDecisionId(dec.id);
     setOverrideTarget(dec);
@@ -399,116 +333,94 @@ export default function OverridePage() {
     if (atBottom) setHasScrolledToBottom(true);
   };
 
-  const addToHistory = (dec: Decision, action: 'ACCEPTED' | 'OVERRIDDEN') => {
-    pushHistory(dec, action);
+  const addToHistory = (id: string, action: 'ACCEPTED' | 'OVERRIDDEN') => {
+    const dec = decisions.find(d => d.id === id);
+    if (!dec) return;
+    let admin = 'ADMIN';
+    try {
+      const auth = JSON.parse(localStorage.getItem('aeonguard_auth') || '{}') as { username?: string };
+      if (auth?.username) admin = String(auth.username);
+    } catch {
+      /* noop */
+    }
+    setHistory(prev => [
+      {
+        id: dec.id,
+        time: 'JUST NOW',
+        crisis: dec.crisisLabel,
+        crisisType: dec.crisisType,
+        person: dec.recommendedPerson,
+        score: dec.score,
+        action,
+        admin,
+        recordedAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
   };
 
   const handleAccept = (id: string) => {
-    setSelectedDecisionId(id);
-    let accepted: Decision | undefined;
-    setDecisions(prev => {
-      const dec = prev.find(d => d.id === id);
-      if (!dec) return prev;
-      localStorage.setItem(`podOverride_${dec.recommendedPod}`, 'WAKING');
-      window.dispatchEvent(new Event('aeonguard:podOverride'));
-      localStorage.setItem('crisisResolved', 'true');
-      localStorage.setItem('crisisResolvedBy', dec.recommendedPerson);
-      localStorage.setItem('crisisResolvedTime', new Date().toISOString());
-      try {
-        const stored = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as { id: string; status?: string }[];
-        const updated = stored.map(d => (d.id === id ? { ...d, status: 'ACCEPTED' as const } : d));
-        localStorage.setItem('pendingDecisions', JSON.stringify(updated));
-      } catch {
-        /* noop */
-      }
-      accepted = dec;
-      return prev.map(d => (d.id === id ? { ...d, status: 'ACCEPTED' as const } : d));
-    });
-    if (accepted) addToHistory({ ...accepted, status: 'ACCEPTED' }, 'ACCEPTED');
+    const dec = decisions.find(d => d.id === id);
+    if (!dec) return;
+    setDecisions(prev => prev.map(d => (d.id === id ? { ...d, status: 'ACCEPTED' as const } : d)));
+    localStorage.setItem(`podOverride_${dec.recommendedPod}`, 'WAKING');
+    window.dispatchEvent(new Event('aeonguard:podOverride'));
+    localStorage.setItem('crisisResolved', 'true');
+    localStorage.setItem('crisisResolvedBy', dec.recommendedPerson);
+    try {
+      const raw = localStorage.getItem('pendingDecisions') || '[]';
+      const stored = JSON.parse(raw) as { id: string; status?: string }[];
+      localStorage.setItem(
+        'pendingDecisions',
+        JSON.stringify(stored.map(s => (s.id === id ? { ...s, status: 'ACCEPTED' as const } : s)))
+      );
+    } catch {
+      /* noop */
+    }
+    addToHistory(id, 'ACCEPTED');
+    window.dispatchEvent(
+      new CustomEvent('aeonguard:decisionSettled', { detail: { id, status: 'ACCEPTED' as const } })
+    );
     setShowOverrideModal(false);
     setOverrideTarget(null);
   };
 
   const handleConfirmOverride = (id: string) => {
-    setSelectedDecisionId(id);
-    let overridden: Decision | undefined;
-    setDecisions(prev => {
-      const dec = prev.find(d => d.id === id);
-      if (!dec) return prev;
-      localStorage.setItem('crisisOverridden', 'true');
-      localStorage.setItem('crisisOverriddenTime', new Date().toISOString());
+    const dec = decisions.find(d => d.id === id);
+    setDecisions(prev => prev.map(d => (d.id === id ? { ...d, status: 'OVERRIDDEN' as const } : d)));
+    if (dec) {
       try {
-        const stored = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as { id: string; status?: string }[];
-        const updated = stored.map(d => (d.id === id ? { ...d, status: 'OVERRIDDEN' as const } : d));
-        localStorage.setItem('pendingDecisions', JSON.stringify(updated));
+        localStorage.setItem(`podOverride_${dec.recommendedPod}`, 'OVERRIDDEN');
+        window.dispatchEvent(new Event('aeonguard:podOverride'));
       } catch {
         /* noop */
       }
-      overridden = dec;
-      return prev.map(d => (d.id === id ? { ...d, status: 'OVERRIDDEN' as const } : d));
-    });
-    if (overridden) addToHistory({ ...overridden, status: 'OVERRIDDEN' }, 'OVERRIDDEN');
-    setShowOverrideModal(false);
-    setOverrideTarget(null);
-  };
-
-  const loadDecisionsFromStorage = useCallback(() => {
+    }
     try {
-      const stored = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as unknown[];
-      if (!Array.isArray(stored) || stored.length === 0) return;
-      setDecisions(prev => {
-        const existingIds = new Set(prev.map(d => d.id));
-        const newOnes: Decision[] = stored
-          .filter(
-            (d): d is Record<string, unknown> =>
-              typeof d === 'object' &&
-              d !== null &&
-              'id' in d &&
-              typeof (d as { id: unknown }).id === 'string' &&
-              !existingIds.has(String((d as { id: unknown }).id))
-          )
-          .filter(d => d.status === 'PENDING')
-          .map(d => {
-            const crisisType = d.crisisType as Decision['crisisType'];
-            return {
-              id: String(d.id),
-              crisisType,
-              crisisLabel: String(d.crisisLabel ?? ''),
-              location: String(d.location ?? ''),
-              recommendedPerson: String(d.recommendedPerson ?? ''),
-              recommendedPod: String(d.recommendedPod ?? ''),
-              role: String(d.role ?? ''),
-              score: Number(d.score ?? 0),
-              bioScore: 94,
-              skillScore: 98,
-              equityScore: 87,
-              triggeredAt: String(d.triggeredAt ?? ''),
-              status: 'PENDING' as const,
-              riskLevel: 'CRITICAL' as const,
-              timeToFailure: '01:30:00',
-              affectedPopulation: 2400,
-              riskDescription: [
-                `${d.crisisLabel} detected in ${d.location}`,
-                `AI recommends waking ${d.recommendedPerson} from ${d.recommendedPod}`,
-                `Composite score: ${d.score}/100`,
-                `Immediate action required`,
-                `No alternative specialists available`,
-              ],
-            };
-          });
-        if (newOnes.length === 0) return prev;
-        const updated = [...newOnes, ...prev];
-        try {
-          localStorage.setItem('overrideDecisions', JSON.stringify(updated));
-        } catch {
-          /* noop */
-        }
-        return updated;
-      });
+      const oRaw = localStorage.getItem('pendingDecisions') || '[]';
+      const oStored = JSON.parse(oRaw) as { id: string; status?: string }[];
+      localStorage.setItem(
+        'pendingDecisions',
+        JSON.stringify(oStored.map(s => (s.id === id ? { ...s, status: 'OVERRIDDEN' as const } : s)))
+      );
     } catch {
       /* noop */
     }
-  }, []);
+    try {
+      localStorage.setItem('crisisOverridden', 'true');
+    } catch {
+      /* noop */
+    }
+    if (dec) {
+      addToHistory(id, 'OVERRIDDEN');
+    }
+    window.dispatchEvent(
+      new CustomEvent('aeonguard:decisionSettled', { detail: { id, status: 'OVERRIDDEN' as const } })
+    );
+    window.dispatchEvent(new Event('aeonguard:decisionsUpdated'));
+    setShowOverrideModal(false);
+    setOverrideTarget(null);
+  };
 
   useEffect(() => {
     let i = 0;
@@ -524,13 +436,22 @@ export default function OverridePage() {
   }, []);
 
   useEffect(() => {
-    loadDecisionsFromStorage();
-  }, [loadDecisionsFromStorage]);
+    loadNewDecisions();
+    const onSync = () => loadNewDecisions();
+    window.addEventListener('focus', onSync);
+    window.addEventListener('aeonguard:decisionsUpdated', onSync);
+    return () => {
+      window.removeEventListener('focus', onSync);
+      window.removeEventListener('aeonguard:decisionsUpdated', onSync);
+    };
+  }, [loadNewDecisions]);
 
   useEffect(() => {
-    window.addEventListener('focus', loadDecisionsFromStorage);
-    return () => window.removeEventListener('focus', loadDecisionsFromStorage);
-  }, [loadDecisionsFromStorage]);
+    const interval = setInterval(() => {
+      loadNewDecisions();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [loadNewDecisions]);
 
   useEffect(() => {
     try {
@@ -607,7 +528,7 @@ export default function OverridePage() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('aeonguard_auth');
+    clearSessionDataForLogout();
     navigate('/');
   };
 
@@ -732,7 +653,7 @@ export default function OverridePage() {
                 localStorage.removeItem('overrideDecisions');
                 localStorage.removeItem('pendingDecisions');
                 localStorage.removeItem('pendingDecisionCount');
-                setDecisions(initialDecisions);
+                setDecisions([]);
                 setSelectedDecisionId(null);
                 setShowOverrideModal(false);
                 setOverrideTarget(null);
@@ -757,10 +678,64 @@ export default function OverridePage() {
             <div className="flex gap-6 flex-wrap">
               {/* Left 40% */}
               <div className="w-full md:w-[40%] min-w-[280px] shrink-0">
-                <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-4">
-                  ── PENDING DECISIONS ──{' '}
-                  <span style={{ color: '#ff4444' }}>{pendingCount} REQUIRE ATTENTION</span>
+                <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <span>
+                    ── PENDING DECISIONS ──{' '}
+                    <span style={{ color: '#ff4444' }}>{pendingCount} REQUIRE ATTENTION</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={loadNewDecisions}
+                    style={{
+                      padding: '4px 12px',
+                      fontFamily: 'monospace',
+                      fontSize: '9px',
+                      background: 'transparent',
+                      border: '1px solid rgba(0,229,255,0.2)',
+                      color: 'rgba(0,229,255,0.4)',
+                      cursor: 'pointer',
+                      letterSpacing: '0.15em',
+                    }}
+                  >
+                    ↺ REFRESH
+                  </button>
                 </div>
+                {decisions.length === 0 && (
+                  <div
+                    style={{
+                      padding: '40px',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      color: 'rgba(0,229,255,0.25)',
+                      letterSpacing: '0.2em',
+                      lineHeight: 2,
+                    }}
+                  >
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <span>NO PENDING DECISIONS</span>
+                      <button
+                        type="button"
+                        onClick={loadNewDecisions}
+                        style={{
+                          padding: '4px 12px',
+                          fontFamily: 'monospace',
+                          fontSize: '9px',
+                          background: 'transparent',
+                          border: '1px solid rgba(0,229,255,0.2)',
+                          color: 'rgba(0,229,255,0.4)',
+                          cursor: 'pointer',
+                          letterSpacing: '0.15em',
+                        }}
+                      >
+                        ↺ REFRESH
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '9px', marginTop: '8px', opacity: 0.6 }}>
+                      Decisions are generated when WARNING or CRITICAL pods are reviewed via AI Engine
+                    </div>
+                  </div>
+                )}
                 {decisions.map(decision => {
                   if (decision.status === 'PENDING') {
                     return (
@@ -1081,7 +1056,7 @@ export default function OverridePage() {
                   { label: 'ACCEPTED', value: String(stats.accepted) },
                   { label: 'OVERRIDDEN', value: String(stats.overridden) },
                   { label: 'ACCEPT RATE', value: `${stats.acceptRate}%` },
-                  { label: 'AVG RESPONSE', value: `${avgResponseMinutes.toFixed(1)} MIN` },
+                  { label: 'OVERRIDE RATE', value: `${stats.overrideRate}%` },
                 ].map(box => (
                   <div key={box.label} className="min-w-0 border border-cyan-500/15 bg-[rgba(0,0,0,0.25)] p-3">
                     <div className="text-[9px] text-cyan-500/40 tracking-widest mb-1 leading-tight">{box.label}</div>
@@ -1093,56 +1068,84 @@ export default function OverridePage() {
               <div className="flex flex-col lg:flex-row gap-4 mb-6">
                 <div className="flex-1 min-h-[240px] border border-cyan-500/10 bg-[rgba(0,0,0,0.2)] p-4">
                   <div className="text-[10px] text-cyan-500/50 tracking-widest mb-2">STATUS MIX</div>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={220}>
-                    <PieChart>
-                      <Pie
-                        data={pieSlices}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={48}
-                        outerRadius={88}
-                        paddingAngle={2}
-                      >
-                        {pieSlices.map(entry => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background: '#000d1a',
-                          border: '1px solid rgba(0,229,255,0.3)',
-                          fontFamily: 'monospace',
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  {pieData.length === 0 ? (
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        fontFamily: 'monospace',
+                        fontSize: '10px',
+                        color: 'rgba(0,229,255,0.2)',
+                        padding: '40px',
+                      }}
+                    >
+                      NO DATA YET
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%" minHeight={220}>
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={48}
+                          outerRadius={88}
+                          paddingAngle={2}
+                        >
+                          {pieData.map(entry => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            background: '#000d1a',
+                            border: '1px solid rgba(0,229,255,0.3)',
+                            fontFamily: 'monospace',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
                 <div className="flex-1 min-h-[240px] border border-cyan-500/10 bg-[rgba(0,0,0,0.2)] p-4">
                   <div className="text-[10px] text-cyan-500/50 tracking-widest mb-2">DECISIONS BY CRISIS TYPE</div>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={220}>
-                    <BarChart data={crisisStats} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,229,255,0.12)" />
-                      <XAxis dataKey="type" tick={{ fill: 'rgba(0,229,255,0.65)', fontSize: 10 }} />
-                      <YAxis tick={{ fill: 'rgba(0,229,255,0.5)', fontSize: 10 }} allowDecimals={false} />
-                      <Tooltip
-                        contentStyle={{
-                          background: '#000d1a',
-                          border: '1px solid rgba(0,229,255,0.3)',
-                          fontFamily: 'monospace',
-                        }}
-                      />
-                      <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-                        {crisisStats.map((row, i) => (
-                          <Cell
-                            key={row.type}
-                            fill={['#00e5ff', '#00ff88', '#ffaa00', '#ff6644'][i] ?? '#00e5ff'}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {crisisStats.length === 0 ? (
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        fontFamily: 'monospace',
+                        fontSize: '10px',
+                        color: 'rgba(0,229,255,0.2)',
+                        padding: '20px',
+                      }}
+                    >
+                      NO DATA YET
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%" minHeight={220}>
+                      <BarChart data={crisisStats} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,229,255,0.12)" />
+                        <XAxis dataKey="type" tick={{ fill: 'rgba(0,229,255,0.65)', fontSize: 10 }} />
+                        <YAxis tick={{ fill: 'rgba(0,229,255,0.5)', fontSize: 10 }} allowDecimals={false} />
+                        <Tooltip
+                          contentStyle={{
+                            background: '#000d1a',
+                            border: '1px solid rgba(0,229,255,0.3)',
+                            fontFamily: 'monospace',
+                          }}
+                        />
+                        <Bar dataKey="count" radius={[2, 2, 0, 0]}>
+                          {crisisStats.map((row, i) => (
+                            <Cell
+                              key={row.type}
+                              fill={['#00e5ff', '#00ff88', '#ffaa00', '#ff6644'][i] ?? '#00e5ff'}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 
@@ -1150,33 +1153,62 @@ export default function OverridePage() {
                 <div className="text-[clamp(0.65rem,0.75vw,0.8rem)] font-bold tracking-[0.2em] text-cyan-500/40 mb-3">
                   ── RESPONSE TIME TREND ──
                 </div>
-                <div style={{ height: 150 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={responseTimeData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,229,255,0.12)" />
-                      <XAxis dataKey="id" tick={{ fill: 'rgba(0,229,255,0.55)', fontSize: 9 }} interval={0} angle={-25} textAnchor="end" height={48} />
-                      <YAxis
-                        tick={{ fill: 'rgba(0,229,255,0.5)', fontSize: 10 }}
-                        label={{ value: 'min', angle: -90, position: 'insideLeft', fill: 'rgba(0,229,255,0.45)', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: '#000d1a',
-                          border: '1px solid rgba(0,229,255,0.3)',
-                          fontFamily: 'monospace',
-                        }}
-                        formatter={(v: number) => [`${v} min`, 'Response']}
-                      />
-                      <ReferenceLine
-                        y={avgResponseMinutes}
-                        stroke="#ffaa00"
-                        strokeDasharray="5 5"
-                        label={{ value: `avg ${avgResponseMinutes.toFixed(1)}`, fill: '#ffaa00', fontSize: 10 }}
-                      />
-                      <Line type="monotone" dataKey="time" stroke="#00e5ff" strokeWidth={2} dot={{ r: 3, fill: '#00ff88' }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                {history.length < 2 || responseTimeData.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                      fontSize: '10px',
+                      color: 'rgba(0,229,255,0.2)',
+                      padding: '20px',
+                    }}
+                  >
+                    INSUFFICIENT DATA · COMPLETE MORE DECISIONS TO VIEW TREND
+                  </div>
+                ) : (
+                  <div style={{ height: 150 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={responseTimeData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,229,255,0.12)" />
+                        <XAxis
+                          dataKey="id"
+                          tick={{ fill: 'rgba(0,229,255,0.55)', fontSize: 9 }}
+                          interval={0}
+                          angle={-25}
+                          textAnchor="end"
+                          height={48}
+                        />
+                        <YAxis
+                          tick={{ fill: 'rgba(0,229,255,0.5)', fontSize: 10 }}
+                          label={{ value: 'min', angle: -90, position: 'insideLeft', fill: 'rgba(0,229,255,0.45)', fontSize: 10 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: '#000d1a',
+                            border: '1px solid rgba(0,229,255,0.3)',
+                            fontFamily: 'monospace',
+                          }}
+                          formatter={(v: number) => [`${v} min`, 'Interval']}
+                        />
+                        {avgResponseMinutes > 0 && (
+                          <ReferenceLine
+                            y={avgResponseMinutes}
+                            stroke="#ffaa00"
+                            strokeDasharray="5 5"
+                            label={{ value: `avg ${avgResponseMinutes.toFixed(1)}`, fill: '#ffaa00', fontSize: 10 }}
+                          />
+                        )}
+                        <Line
+                          type="monotone"
+                          dataKey="time"
+                          stroke="#00e5ff"
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: '#00ff88' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
               <div>

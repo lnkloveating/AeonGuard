@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAeonStore } from '../store/aeonStore';
 import { useOverrideBadge } from '../hooks/useOverrideBadge';
+import { clearSessionDataForLogout } from '../utils/clearSessionLocalStorage';
 import {
   Terminal, Home, Database, AlertTriangle, Cpu, Zap, FileText, Users, ClipboardList, Settings, LogOut, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react';
@@ -16,185 +17,141 @@ const crisisScenarios = [
   { id: 'pressure',  icon: '🔴', label: 'PRESSURE ANOMALY',    location: 'SECTOR B2-I1', severity: 'WARNING',  color: '#ffaa00' },
 ];
 
-const reasoningScripts: Record<string, string[]> = {
-  oxygen: [
+// Fixed pool of NOMINAL specialist pods to recommend from (always NOMINAL status)
+const nominalSpecialists = [
+  { pod: 'POD-001', person: 'CHEN_WEI',  role: 'Life Support Engineer',  bio: 94, skill: 98, equity: 87 },
+  { pod: 'POD-005', person: 'YANOV_K',   role: 'Nuclear Engineer',        bio: 91, skill: 97, equity: 95 },
+  { pod: 'POD-007', person: 'GARCIA_M',  role: 'Systems Engineer',        bio: 85, skill: 94, equity: 82 },
+  { pod: 'POD-009', person: 'MÜLLER_H',  role: 'Geologist',               bio: 89, skill: 88, equity: 91 },
+  { pod: 'POD-010', person: 'PATEL_R',   role: 'Biologist',               bio: 92, skill: 86, equity: 88 },
+] as const;
+
+type NominalSpecialist = (typeof nominalSpecialists)[number];
+
+const specialistMap: Record<string, NominalSpecialist> = {
+  oxygen: nominalSpecialists[0], // CHEN_WEI — Life Support
+  radiation: nominalSpecialists[1], // YANOV_K — Nuclear
+  power: nominalSpecialists[2], // GARCIA_M — Systems
+  pressure: nominalSpecialists[3], // MÜLLER_H — Geology
+  default: nominalSpecialists[0],
+};
+
+const buildScript = (crisisType: string, problemPod: string, problemPerson: string, source: 'c1' | 'c2'): string[] => {
+  const specialist = specialistMap[crisisType] || specialistMap['default'];
+  if (source === 'c1') {
+    const bioSick = crisisType === 'oxygen' ? 68 : 74;
+    const sk = 72;
+    const eq = 70;
+    const composite = (bioSick * 0.35 + sk * 0.4 + eq * 0.25).toFixed(1);
+    return [
+      '══════════════════════════════════════════',
+      '  CRISIS-警报 RECEIVED · SYS-alert triggered',
+      '══════════════════════════════════════════',
+      `> SOURCE-来源: ${problemPod} · OCCUPANT-占用者: ${problemPerson}`,
+      `> STATUS-状态: ${crisisType === 'oxygen' ? 'CRITICAL-危急' : 'WARNING-警告'} · IMMEDIATE-立即 ACTION-行动 REQUIRED-需要`,
+      '',
+      '> SCANNING-扫描 AFFECTED-受影响 HIBERNATION-休眠 POD-舱位...',
+      '> ████████████████████████████████ 100%',
+      '',
+      '══════════════════════════════════════════',
+      '  STEP 1: CRISIS-危机 IDENTIFICATION-识别',
+      '══════════════════════════════════════════',
+      `> CRISIS-危机 TYPE-类型: ${crisisType.toUpperCase()} (BIO-生物)`,
+      `> AFFECTED-受影响 POD-舱位: ${problemPod} · ${problemPerson}`,
+      `> CONSULT-参考 EXPERTISE-专长: ${specialist.role.toUpperCase()} (NOMINAL-正常池)`,
+      '',
+      '══════════════════════════════════════════',
+      '  STEP 2: SKILL-技能 MATCHING-匹配',
+      '══════════════════════════════════════════',
+      '> PRIORITY-优先: WAKE-唤醒 OCCUPANT-占用者 IN-在 SOURCE-来源 POD-舱位',
+      `> TARGET-目标: ${problemPerson} · ${problemPod} · NOT-非 ${specialist.pod}`,
+      '',
+      '══════════════════════════════════════════',
+      '  STEP 3: THREE-三维 DIMENSION-维度 EVALUATION-评估',
+      '══════════════════════════════════════════',
+      `> BIO-生物 HEALTH-健康: ${bioSick}/100 · ${crisisType === 'oxygen' ? 'CRITICAL-危急' : 'WARNING-警告'}`,
+      `> SKILL-技能 MATCH-匹配: ${sk}/100`,
+      `> EQUITY-公平 INDEX-指数: ${eq}/100`,
+      '',
+      '> WEIGHTED-加权 COMPOSITE-综合 SCORE-评分 (OCCUPANT-占用者):',
+      `> ${bioSick}×0.35 + ${sk}×0.40 + ${eq}×0.25 = ${composite}`,
+      '',
+      '══════════════════════════════════════════',
+      '  STEP 4: FINAL-最终 RECOMMENDATION-推荐',
+      '══════════════════════════════════════════',
+      '> ┌─────────────────────────────────────────┐',
+      `> │  WAKE-唤醒: ${problemPerson} · ${problemPod}     │`,
+      `> │  COMPOSITE-综合 SCORE-评分: ${composite} / 100  │`,
+      `> │  REASON-原因: STABILIZE-稳定 BIO-生物 CRISIS-危机  │`,
+      '> └─────────────────────────────────────────┘',
+      '',
+      '> ANALYSIS-分析 COMPLETE-完成',
+      '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
+      '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
+      '> _',
+    ];
+  }
+
+  const composite = (specialist.bio * 0.35 + specialist.skill * 0.4 + specialist.equity * 0.25).toFixed(1);
+  return [
     '══════════════════════════════════════════',
     '  CRISIS-警报 RECEIVED · SYS-alert triggered',
     '══════════════════════════════════════════',
-    '> TYPE: O₂-气体 DEPLETION · SEVERITY-等级: CRITICAL-危急',
-    '> LOCATION-位置: SECTOR B1-R2 · 居住区B',
-    '> O₂-气体 LEVEL-水平: 71.3% · THRESHOLD-阈值: 78.0%',
-    '> TIME-时间 TO CRITICAL-危急 FAILURE: 01:30:00',
+    `> SOURCE-来源: ${problemPod} · OCCUPANT-占用者: ${problemPerson}`,
+    `> STATUS-状态: ${crisisType === 'oxygen' ? 'CRITICAL-危急' : 'WARNING-警告'} · IMMEDIATE-立即 ACTION-行动 REQUIRED-需要`,
     '',
-    '> INITIATING EMERGENCY-紧急 SPECIALIST-专家 SCAN-扫描...',
-    '> SCANNING-扫描 127 CRYO-舱位...',
+    '> SCANNING-扫描 NOMINAL-正常 STATUS-状态 SPECIALISTS-专家...',
     '> ████████████████████████████████ 100%',
     '',
     '══════════════════════════════════════════',
-    '  STEP 1: CRISIS-危机 TYPE-类型 IDENTIFICATION-识别',
+    '  STEP 1: CRISIS-危机 IDENTIFICATION-识别',
     '══════════════════════════════════════════',
-    '> ANALYZING-分析 CRISIS-危机 PARAMETERS-参数...',
-    '> REQUIRED-需求 EXPERTISE-专长:',
-    '>   · LIFE-SUPPORT-生命支持 ENGINEERING (PRIMARY-主要)',
-    '>   · STRUCTURAL-结构 ENGINEERING (SECONDARY-次要)',
-    '>   · MEDICAL-医疗 OFFICER-官员 (SUPPORT-支援)',
+    `> CRISIS-危机 TYPE-类型: ${crisisType.toUpperCase()}`,
+    `> AFFECTED-受影响 POD-舱位: ${problemPod} · ${problemPerson}`,
+    `> REQUIRED-需求 EXPERTISE-专长: ${specialist.role.toUpperCase()}`,
     '',
     '══════════════════════════════════════════',
     '  STEP 2: SKILL-技能 MATCHING-匹配',
     '══════════════════════════════════════════',
-    '> SEARCHING-搜索 SPECIALIST-专家 DATABASE-数据库...',
-    '> LIFE-SUPPORT-生命支持 ENGINEERS-工程师 FOUND-找到: 14',
-    '> STRUCTURAL-结构 ENGINEERS-工程师 FOUND-找到: 18',
-    '> MEDICAL-医疗 OFFICERS-官员 FOUND-找到: 12',
-    '> TOTAL-总计 CANDIDATES-候选: 44',
+    '> SEARCHING-搜索 NOMINAL-正常态 SPECIALISTS-专家...',
+    `> MATCH FOUND-找到: ${specialist.person} · ${specialist.pod}`,
+    `> ROLE-职位: ${specialist.role.toUpperCase()}`,
+    '> STATUS-状态: NOMINAL-正常态 · HEALTHY-健康 · READY-就绪',
     '',
     '══════════════════════════════════════════',
     '  STEP 3: THREE-三维 DIMENSION-维度 EVALUATION-评估',
     '══════════════════════════════════════════',
-    '> DIM-维度 1: BIO-生物 HEALTH-健康 ASSESSMENT-评估',
-    '>   CHEN_WEI  ♥52 BPM  36.1°C  18% META  → BIO-评分: 94',
-    '>   SMITH_J   ♥48 BPM  35.8°C  16% META  → BIO-评分: 88',
-    '>   ZHANG_LI  ♥55 BPM  36.5°C  21% META  → BIO-评分: 76',
-    '>   YANOV_K   ♥44 BPM  35.6°C  15% META  → BIO-评分: 91',
+    `> BIO-生物 HEALTH-健康: ${specialist.bio}/100 · NOMINAL-正常态`,
+    `> SKILL-技能 MATCH-匹配: ${specialist.skill}/100 ★`,
+    `> EQUITY-公平 INDEX-指数: ${specialist.equity}/100`,
     '',
-    '> DIM-维度 2: SKILL-技能 MATCH-匹配 ASSESSMENT-评估',
-    '>   CHEN_WEI  LIFE-SUPPORT-生命支持 · 12YR EXP  → SKILL-匹配度: 98 ★',
-    '>   SMITH_J   LIFE-SUPPORT-生命支持 · 8YR EXP   → SKILL-匹配度: 91',
-    '>   ZHANG_LI  STRUCTURAL-结构 · 15YR EXP        → SKILL-匹配度: 85',
-    '>   YANOV_K   LIFE-SUPPORT-生命支持 · 10YR EXP  → SKILL-匹配度: 93',
-    '',
-    '> DIM-维度 3: NATIONAL-国家 ROTATION-轮换 EQUITY-公平',
-    '>   CHECKING-检查 ROTATION-轮换 HISTORY-历史...',
-    '>   CHEN_WEI  [CN]  LAST-上次 ACTIVE-活跃: 47 DAYS-天 AGO  → EQUITY-公平指数: 87',
-    '>   SMITH_J   [US]  LAST-上次 ACTIVE-活跃: 23 DAYS-天 AGO  → EQUITY-公平指数: 76',
-    '>   ZHANG_LI  [CN]  LAST-上次 ACTIVE-活跃: 12 DAYS-天 AGO  → EQUITY-公平指数: 65',
-    '>   YANOV_K   [RU]  LAST-上次 ACTIVE-活跃: 89 DAYS-天 AGO  → EQUITY-公平指数: 95',
+    '> WEIGHTED-加权 COMPOSITE-综合 SCORE-评分:',
+    `> ${specialist.bio}×0.35 + ${specialist.skill}×0.40 + ${specialist.equity}×0.25 = ${composite}`,
     '',
     '══════════════════════════════════════════',
-    '  STEP 4: COMPOSITE-综合 SCORING-评分',
+    '  STEP 4: FINAL-最终 RECOMMENDATION-推荐',
     '══════════════════════════════════════════',
-    '> CALCULATING-计算 WEIGHTED-加权 SCORES-分数...',
-    '>   BIO-生物(35%) + SKILL-技能(40%) + EQUITY-公平(25%)',
-    '',
-    '>   CHEN_WEI  94×0.35 + 98×0.40 + 87×0.25 = 93.6  ★ RANK-排名 #1',
-    '>   YANOV_K   91×0.35 + 93×0.40 + 95×0.25 = 92.5    RANK-排名 #2',
-    '>   SMITH_J   88×0.35 + 91×0.40 + 76×0.25 = 86.4    RANK-排名 #3',
-    '>   ZHANG_LI  76×0.35 + 85×0.40 + 65×0.25 = 77.8    RANK-排名 #4',
-    '',
-    '══════════════════════════════════════════',
-    '  STEP 5: FINAL-最终 RECOMMENDATION-推荐',
-    '══════════════════════════════════════════',
-    '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED-推荐: CHEN_WEI · CRYO-047   │',
-    '> │  COMPOSITE-综合 SCORE-评分: 93.6 / 100    │',
-    '> │  ROLE-职位: LIFE-SUPPORT-生命支持 ENG     │',
-    '> │  STATUS-状态: DORMANT-休眠 · READY-就绪   │',
-    '> └─────────────────────────────────────┘',
+    '> ┌─────────────────────────────────────────┐',
+    `> │  WAKE-唤醒: ${specialist.person} · ${specialist.pod}     │`,
+    `> │  ROLE-职位: ${specialist.role.toUpperCase()}  │`,
+    `> │  COMPOSITE-综合 SCORE-评分: ${composite} / 100  │`,
+    `> │  TO ASSIST-协助: ${problemPod} · ${problemPerson}  │`,
+    '> └─────────────────────────────────────────┘',
     '',
     '> ANALYSIS-分析 COMPLETE-完成',
-    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策 PANEL-面板...',
-    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
-    '> AWAITING-等待 HUMAN-人工 AUTHORIZATION-授权...',
-    '> _',
-  ],
-  radiation: [
-    '> TYPE: RAD-辐射 SURGE-激增 · SEVERITY-等级: WARNING-警告',
-    '> LOCATION-位置: SECTOR B3-E1 · 能源区A',
-    '> RAD-辐射 LEVEL-水平: 89.3 mSv · THRESHOLD-阈值: 100 mSv',
-    '',
-    '> INITIATING-启动 SPECIALIST-专家 SCAN-扫描...',
-    '> SCANNING-扫描 127 CRYO-舱位...',
-    '> ████████████████████████████████ 100%',
-    '',
-    '> REQUIRED-需求 EXPERTISE-专长: NUCLEAR-核能 ENG · RAD-辐射 SPECIALIST-专家',
-    '',
-    '> DIM-维度 1: BIO-生物 ASSESSMENT-评估',
-    '>   YANOV_K   ♥44 BPM  35.6°C  → BIO-评分: 91',
-    '>   MÜLLER_H  ♥47 BPM  36.0°C  → BIO-评分: 89',
-    '',
-    '> DIM-维度 2: SKILL-技能 MATCH-匹配',
-    '>   YANOV_K   NUCLEAR-核能 ENG · 15YR EXP  → SKILL-匹配度: 97 ★',
-    '>   MÜLLER_H  GEOLOGY-地质 · 11YR EXP      → SKILL-匹配度: 82',
-    '',
-    '> DIM-维度 3: EQUITY-公平 CHECK-检查',
-    '>   YANOV_K   [RU]  LAST-上次: 89 DAYS-天  → EQUITY-公平指数: 95',
-    '>   MÜLLER_H  [DE]  LAST-上次: 34 DAYS-天  → EQUITY-公平指数: 78',
-    '',
-    '> FINAL-最终 SCORE-评分:',
-    '>   YANOV_K   91×0.35+97×0.40+95×0.25 = 94.4  ★ RANK-排名 #1',
-    '>   MÜLLER_H  89×0.35+82×0.40+78×0.25 = 83.6    RANK-排名 #2',
-    '',
-    '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED-推荐: YANOV_K · CRYO-023     │',
-    '> │  COMPOSITE-综合 SCORE-评分: 94.4 / 100    │',
-    '> └─────────────────────────────────────┘',
     '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
     '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
     '> _',
-  ],
-  power: [
-    '> TYPE: PWR-电力 SYSTEM-系统 FAILURE-故障 · SEVERITY-等级: CRITICAL-危急',
-    '> LOCATION-位置: SECTOR B3-E2 · 能源区B',
-    '> REQUIRED-需求: SYSTEMS-系统 ENG · ELECTRICAL-电气 SPECIALIST-专家',
-    '',
-    '> SCANNING-扫描 CRYO-舱位...',
-    '>   GARCIA_M  SYSTEMS-系统 ENG  BIO-评分:85  SKILL-匹配:94  EQUITY-公平:82  → 87.8 ★',
-    '>   KIM_S     NAV-导航 OFFICER  BIO-评分:91  SKILL-匹配:78  EQUITY-公平:88  → 85.3',
-    '',
-    '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED-推荐: GARCIA_M · CRYO-067    │',
-    '> │  COMPOSITE-综合 SCORE-评分: 87.8 / 100    │',
-    '> └─────────────────────────────────────┘',
-    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
-    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
-    '> _',
-  ],
-  pressure: [
-    '> TYPE: PRS-气压 ANOMALY-异常 · SEVERITY-等级: WARNING-警告',
-    '> LOCATION-位置: SECTOR B2-I1 · 工业区A',
-    '> REQUIRED-需求: STRUCTURAL-结构 ENGINEER-工程师',
-    '',
-    '> SCANNING-扫描 CRYO-舱位...',
-    '>   SMITH_J   STRUCTURAL-结构  BIO-评分:88  SKILL-匹配:96  EQUITY-公平:91  → 92.8 ★',
-    '>   CHEN_WEI  LIFE-SUPPORT-生命支持  BIO-评分:94  SKILL-匹配:79  EQUITY-公平:76  → 81.4',
-    '',
-    '> ┌─────────────────────────────────────┐',
-    '> │  RECOMMENDED-推荐: SMITH_J · CRYO-041     │',
-    '> │  COMPOSITE-综合 SCORE-评分: 92.8 / 100    │',
-    '> └─────────────────────────────────────┘',
-    '> FORWARDING-转发 TO HUMAN-人工 OVERRIDE-决策...',
-    '> ► DECISION-决策 QUEUE-队列 UPDATED-更新 [+1 PENDING-待审]',
-    '> _',
-  ],
+  ];
 };
 
-const historyData = [
-  { time: '2H AGO',  crisis: 'OXYGEN DEPLETION',    recommended: 'CHEN_WEI',  score: 93.6, action: 'ACCEPTED' },
-  { time: '6H AGO',  crisis: 'RADIATION SURGE',     recommended: 'YANOV_K',   score: 94.4, action: 'ACCEPTED' },
-  { time: '1D AGO',  crisis: 'POWER FAILURE',       recommended: 'GARCIA_M',  score: 87.8, action: 'OVERRIDDEN' },
-  { time: '3D AGO',  crisis: 'PRESSURE ANOMALY',    recommended: 'SMITH_J',   score: 92.8, action: 'ACCEPTED' },
-  { time: '7D AGO',  crisis: 'OXYGEN DEPLETION',    recommended: 'SMITH_J',   score: 86.4, action: 'ACCEPTED' },
-];
-
-const candidateMaps: Record<string, any[]> = {
-  oxygen: [
-    { name: 'CHEN_WEI', role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-047', bio: 94, skill: 98, equity: 87, score: 93.6, rank: 1 },
-    { name: 'YANOV_K',  role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-023', bio: 91, skill: 93, equity: 95, score: 92.5, rank: 2 },
-    { name: 'SMITH_J',  role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-112', bio: 88, skill: 91, equity: 76, score: 86.4, rank: 3 },
-    { name: 'ZHANG_LI', role: 'STRUCTURAL ENGINEER',   pod: 'CRYO-088', bio: 76, skill: 85, equity: 65, score: 77.8, rank: 4 },
-  ],
-  radiation: [
-    { name: 'YANOV_K',  role: 'NUCLEAR ENGINEER', pod: 'CRYO-023', bio: 91, skill: 97, equity: 95, score: 94.4, rank: 1 },
-    { name: 'MÜLLER_H', role: 'GEOLOGY',          pod: 'CRYO-055', bio: 89, skill: 82, equity: 78, score: 83.6, rank: 2 },
-  ],
-  power: [
-    { name: 'GARCIA_M', role: 'SYSTEMS ENGINEER', pod: 'CRYO-067', bio: 85, skill: 94, equity: 82, score: 87.8, rank: 1 },
-    { name: 'KIM_S',    role: 'NAVIGATION',       pod: 'CRYO-034', bio: 91, skill: 78, equity: 88, score: 85.3, rank: 2 },
-  ],
-  pressure: [
-    { name: 'SMITH_J',  role: 'STRUCTURAL ENGINEER', pod: 'CRYO-041', bio: 88, skill: 96, equity: 91, score: 92.8, rank: 1 },
-    { name: 'CHEN_WEI', role: 'LIFE SUPPORT ENGINEER', pod: 'CRYO-047', bio: 94, skill: 79, equity: 76, score: 81.4, rank: 2 },
-  ]
+type ReasoningHistoryEntry = {
+  id: string;
+  time: string;
+  crisis: string;
+  recommended: string;
+  score: number;
+  action: 'PENDING' | 'ACCEPTED' | 'OVERRIDDEN';
 };
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
@@ -226,13 +183,6 @@ export default function AIEnginePage() {
   );
 }
 
-const personMap: Record<string, { person: string; pod: string; role: string; score: number }> = {
-  oxygen: { person: 'CHEN_WEI', pod: 'CRYO-047', role: '生命支持工程师', score: 93.6 },
-  radiation: { person: 'YANOV_K', pod: 'CRYO-023', role: '核工程师', score: 94.4 },
-  power: { person: 'GARCIA_M', pod: 'CRYO-067', role: '系统工程师', score: 87.8 },
-  pressure: { person: 'SMITH_J', pod: 'CRYO-041', role: '结构工程师', score: 92.8 },
-};
-
 function AIEnginePageContent() {
   const { addDecision } = useAeonStore();
   const overrideBadge = useOverrideBadge();
@@ -249,11 +199,24 @@ function AIEnginePageContent() {
   const fullTitle = 'AI REASONING ENGINE';
 
   const [activeCrisisId, setActiveCrisisId] = useState<string | null>(null);
+  const [activeCrisisInfo, setActiveCrisisInfo] = useState<null | { label: string; location: string }>(null);
+  const [lastRec, setLastRec] = useState<null | {
+    name: string;
+    role: string;
+    pod: string;
+    bio: number;
+    skill: number;
+    equity: number;
+    score: number;
+  }>(null);
   const [displayedLines, setDisplayedLines] = useState<string[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [reasoningHistory, setReasoningHistory] = useState<ReasoningHistoryEntry[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cancelRef = useRef<boolean>(false);
+  const hasAutoRunFromPodsRef = useRef(false);
 
   useEffect(() => {
     let i = 0;
@@ -284,108 +247,250 @@ function AIEnginePageContent() {
     };
   }, []);
 
-  const startReasoning = (crisisId: string) => {
-    if (isTyping) return;
-    setActiveCrisisId(crisisId);
-    const script = reasoningScripts[crisisId];
-    if (!script) return;
-    setDisplayedLines([]);
-    setIsTyping(true);
-    setCurrentStep(0);
+  const startReasoning = useCallback(
+    (crisisType: string, problemPod?: string, problemPerson?: string, source: 'c1' | 'c2' = 'c2') => {
+      if (isTyping) return;
+      const problemPodResolved = problemPod || 'POD-119';
+      const problemPersonResolved = problemPerson || 'UNKNOWN';
+      const def = crisisScenarios.find(c => c.id === crisisType);
+      if (!def) return;
 
-    let lineIndex = 0;
-    let cancelled = false;
+      const labelSnap = localStorage.getItem('activeCrisisLabel') ?? def.label;
+      const locSnap = localStorage.getItem('activeCrisisLocation') ?? def.location;
+      const occupantRole = source === 'c1' ? localStorage.getItem('recommendedRole') : null;
+      [
+        'activeCrisisType', 'recommendedPod', 'recommendedPerson', 'recommendedRole', 'activeCrisisLabel', 'activeCrisisLocation',
+      ].forEach(k => localStorage.removeItem(k));
 
-    const addNextLine = () => {
-      if (cancelled || cancelRef.current) return;
-      if (lineIndex >= script.length) {
-        setIsTyping(false);
-        const activeCrisis = crisisScenarios.find(c => c.id === crisisId);
-        const topCandidate = candidateMaps[crisisId]?.[0];
-        const pm = personMap[crisisId];
-        if (activeCrisis && topCandidate) {
-          const recommendedPerson = pm?.person ?? topCandidate.name;
-          const recommendedPod = pm?.pod ?? topCandidate.pod;
-          const role = pm?.role ?? topCandidate.role;
-          const score = pm?.score ?? topCandidate.score;
+      const specialist = specialistMap[crisisType] || specialistMap['default'];
+      const composite = (
+        specialist.bio * 0.35 + specialist.skill * 0.4 + specialist.equity * 0.25
+      ).toFixed(1);
+      const compositeNum = parseFloat(composite);
+      const c1Bio = crisisType === 'oxygen' ? 68 : 74;
+      const c1Skill = 72;
+      const c1Equity = 70;
+      const c1CompositeNum = parseFloat((c1Bio * 0.35 + c1Skill * 0.4 + c1Equity * 0.25).toFixed(1));
+      const isC2HabitatEnv =
+        source === 'c2' && specialist.pod === problemPodResolved && specialist.person === problemPersonResolved;
 
-          addDecision({
-            crisisId: crisisId,
-            recommendedPod,
-            recommendedPerson,
-            score,
-            reason: `Composite Score: ${score}`,
-          });
+      setActiveCrisisId(crisisType);
+      setLastRec(null);
+      const script = buildScript(crisisType, problemPodResolved, problemPersonResolved, source);
+      setDisplayedLines([]);
+      setIsTyping(true);
+      setCurrentStep(0);
+
+      let lineIndex = 0;
+      let cancelled = false;
+
+      const addNextLine = () => {
+        if (cancelled || cancelRef.current) return;
+        if (lineIndex >= script.length) {
+          const activeCrisis = crisisScenarios.find(c => c.id === crisisType);
+          const isC1 = source === 'c1';
+          const recPod = isC1 ? problemPodResolved : specialist.pod;
+          const recPerson = isC1 ? problemPersonResolved : specialist.person;
+          const recRole = isC1 ? (occupantRole || 'Crew') : specialist.role;
+          const decisionScore = isC1 ? c1CompositeNum : compositeNum;
+          const decisionBio = isC1 ? c1Bio : specialist.bio;
+          const decisionSkill = isC1 ? c1Skill : specialist.skill;
+          const decisionEquity = isC1 ? c1Equity : specialist.equity;
+          const decisionCompositeStr = isC1 ? c1CompositeNum.toFixed(1) : composite;
 
           const decisionData = {
             id: `DEC-${Date.now()}`,
-            crisisType: activeCrisis.id,
-            crisisLabel: activeCrisis.label,
-            location: activeCrisis.location,
-            recommendedPerson,
-            recommendedPod,
-            role,
-            score,
+            crisisType: crisisType as 'oxygen' | 'radiation' | 'power' | 'pressure',
+            crisisLabel: activeCrisis?.label || labelSnap,
+            location: locSnap || activeCrisis?.location || problemPodResolved,
+            recommendedPerson: recPerson,
+            recommendedPod: recPod,
+            role: recRole,
+            score: decisionScore,
             status: 'PENDING' as const,
             triggeredAt: new Date().toISOString(),
+            bioScore: decisionBio,
+            skillScore: decisionSkill,
+            equityScore: decisionEquity,
+            riskLevel: (crisisType === 'oxygen' ? 'CRITICAL' : 'HIGH') as 'CRITICAL' | 'HIGH' | 'MODERATE',
+            timeToFailure: crisisType === 'oxygen' ? '01:00:00' : '02:30:00',
+            affectedPopulation: 1,
+            riskDescription: isC1
+              ? [
+                  `${problemPersonResolved} in ${problemPodResolved} is in ${crisisType === 'oxygen' ? 'CRITICAL' : 'WARNING'} condition`,
+                  'AI recommends waking this occupant in the affected pod to stabilize bio readings and enable intervention',
+                  `Role on file: ${recRole} · composite score: ${decisionCompositeStr}/100`,
+                  'Human override (C3) is required to authorize the wake sequence',
+                ]
+              : isC2HabitatEnv
+                ? [
+                    `${crisisType.toUpperCase()} environmental crisis detected — affected sector: ${locSnap || 'UNKNOWN'}`,
+                    `${specialist.person} (${specialist.pod}) is the NOMINAL specialist best matched to remediate this crisis`,
+                    `${specialist.person} has the highest ${specialist.role} skill match for this crisis type`,
+                    `Composite score: ${decisionCompositeStr}/100`,
+                    `Waking ${specialist.person} will not harm their long-term hibernation health`,
+                  ]
+                : [
+                    `${problemPersonResolved} in ${problemPodResolved} is in ${crisisType === 'oxygen' ? 'CRITICAL' : 'WARNING'} condition`,
+                    `${specialist.person} (${specialist.pod}) is recommended to assist — currently NOMINAL status`,
+                    `${specialist.person} has the highest ${specialist.role} skill match for this crisis type`,
+                    `Composite score: ${decisionCompositeStr}/100`,
+                    `Waking ${specialist.person} will not harm their long-term hibernation health`,
+                  ],
           };
+          let alreadyExists = false;
+          let wroteNew = false;
           try {
-            const existing = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as unknown[];
-            const list = Array.isArray(existing) ? existing : [];
-            list.unshift(decisionData);
-            localStorage.setItem('pendingDecisions', JSON.stringify(list));
-            localStorage.setItem(
-              'pendingDecisionCount',
-              String(list.filter((d: { status?: string }) => d.status === 'PENDING').length)
+            const existing = JSON.parse(localStorage.getItem('pendingDecisions') || '[]') as {
+              recommendedPod?: string;
+              status?: string;
+            }[];
+            if (!Array.isArray(existing)) throw new Error('pendingDecisions is not an array');
+            alreadyExists = existing.some(
+              d => d.recommendedPod === recPod && d.status === 'PENDING'
             );
-            window.dispatchEvent(new Event('aeonguard:pendingDecisionCount'));
-          } catch {
-            /* noop */
+            if (!alreadyExists) {
+              existing.unshift(decisionData);
+              localStorage.setItem('pendingDecisions', JSON.stringify(existing));
+              localStorage.setItem(
+                'pendingDecisionCount',
+                String(existing.filter(d => d.status === 'PENDING').length)
+              );
+              window.dispatchEvent(new Event('aeonguard:pendingDecisionCount'));
+              window.dispatchEvent(new Event('aeonguard:decisionsUpdated'));
+              wroteNew = true;
+            }
+          } catch (e) {
+            console.error('Failed to save decision:', e);
           }
+          if (wroteNew) {
+            addDecision({
+              crisisId: crisisType,
+              recommendedPod: recPod,
+              recommendedPerson: recPerson,
+              score: decisionScore,
+              reason: `Composite Score: ${decisionScore}`,
+            });
+            setReasoningHistory(prev => [
+              {
+                id: decisionData.id,
+                time: 'JUST NOW',
+                crisis: activeCrisis?.label || 'Unknown',
+                recommended: recPerson,
+                score: decisionScore,
+                action: 'PENDING',
+              },
+              ...prev,
+            ]);
+          }
+          setLastRec({
+            name: recPerson,
+            role: recRole,
+            pod: recPod,
+            bio: decisionBio,
+            skill: decisionSkill,
+            equity: decisionEquity,
+            score: decisionScore,
+          });
+          setIsTyping(false);
+          return;
         }
-        return;
-      }
-      const line = script[lineIndex];
-      setDisplayedLines(prev => [...prev, line]);
-      
-      const stepMarkers = ['STEP 1', 'STEP 2', 'STEP 3', 'STEP 4', 'STEP 5'];
-      stepMarkers.forEach((marker, i) => {
-        if (line.includes(marker)) setCurrentStep(i + 1);
-      });
-      lineIndex++;
-      
-      const delay = line.includes('═') ? 50
-        : line.includes('STEP') ? 400
-        : line === '' ? 150
-        : 80;
-      setTimeout(addNextLine, delay);
-    };
+        const line = script[lineIndex];
+        setDisplayedLines(prev => [...prev, line]);
 
-    setTimeout(addNextLine, 300);
+        const stepMarkers = ['STEP 1', 'STEP 2', 'STEP 3', 'STEP 4'];
+        stepMarkers.forEach((marker, i) => {
+          if (line.includes(marker)) setCurrentStep(i + 1);
+        });
+        lineIndex++;
 
-    return () => { cancelled = true; };
-  };
+        const delay = line.includes('═') ? 50 : line.includes('STEP') ? 400 : line === '' ? 150 : 80;
+        setTimeout(addNextLine, delay);
+      };
+
+      setTimeout(addNextLine, 300);
+    },
+    [isTyping, addDecision]
+  );
 
   useEffect(() => {
+    if (hasAutoRunFromPodsRef.current) return;
     const crisisType = localStorage.getItem('activeCrisisType');
-    if (crisisType && reasoningScripts[crisisType]) {
-      setActiveCrisisId(crisisType);
-      setTimeout(() => {
-        startReasoning(crisisType);
-      }, 1000);
-      // Optional: Clear it so we don't keep auto-starting on fresh navigations
-      localStorage.removeItem('activeCrisisType');
+    const recommendedPod = localStorage.getItem('recommendedPod');
+    const recommendedPerson = localStorage.getItem('recommendedPerson');
+    const crisisLabel = localStorage.getItem('activeCrisisLabel');
+    const crisisLocation = localStorage.getItem('activeCrisisLocation');
+
+    if (!crisisType) return;
+
+    hasAutoRunFromPodsRef.current = true;
+    setActiveCrisisId(crisisType);
+    setActiveCrisisInfo({ label: crisisLabel || crisisType, location: crisisLocation || 'UNKNOWN' });
+
+    // C2 (Habitat): no pod from C1, or placeholder only → use NOMINAL specialist as entry context
+    // C1 (Pods): recommendedPod is the WARNING/CRITICAL pod
+    const isFromC2 = !recommendedPod || recommendedPod === 'SPECIALIST';
+
+    if (isFromC2) {
+      const c2 = specialistMap[crisisType] || specialistMap['default'];
+      setTimeout(() => startReasoning(crisisType, c2.pod, c2.person, 'c2'), 800);
+    } else {
+      const person = recommendedPerson || 'SPECIALIST';
+      setTimeout(() => startReasoning(crisisType, recommendedPod || undefined, person, 'c1'), 800);
     }
-  }, []);
+  }, [startReasoning]);
 
   const handleLogout = () => {
-    localStorage.removeItem('aeonguard_auth');
+    clearSessionDataForLogout();
     navigate('/');
   };
-  const cancelRef = useRef<boolean>(false);
 
   useEffect(() => {
     return () => { cancelRef.current = true; };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('pendingDecisions') || '[]';
+      const stored = JSON.parse(raw) as {
+        id?: string;
+        status?: string;
+        crisisLabel?: string;
+        recommendedPerson?: string;
+        score?: number;
+      }[];
+      if (!Array.isArray(stored)) return;
+      const resolved = stored.filter(
+        d => d.status === 'ACCEPTED' || d.status === 'OVERRIDDEN'
+      );
+      if (resolved.length > 0) {
+        setReasoningHistory(
+          resolved.map((d, i) => ({
+            id: d.id || `res-${i}`,
+            time: 'EARLIER' as const,
+            crisis: d.crisisLabel || 'Unknown',
+            recommended: d.recommendedPerson || '',
+            score: typeof d.score === 'number' ? d.score : 0,
+            action: d.status as 'ACCEPTED' | 'OVERRIDDEN',
+          }))
+        );
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  useEffect(() => {
+    const onSettled = (e: Event) => {
+      const ce = e as CustomEvent<{ id: string; status: 'ACCEPTED' | 'OVERRIDDEN' }>;
+      const { id, status } = ce.detail || {};
+      if (typeof id !== 'string' || (status !== 'ACCEPTED' && status !== 'OVERRIDDEN')) return;
+      setReasoningHistory(prev =>
+        prev.map(h => (h.id === id && h.action === 'PENDING' ? { ...h, action: status } : h))
+      );
+    };
+    window.addEventListener('aeonguard:decisionSettled', onSettled);
+    return () => window.removeEventListener('aeonguard:decisionSettled', onSettled);
   }, []);
 
   useEffect(() => {
@@ -458,8 +563,32 @@ function AIEnginePageContent() {
     };
   }, []);
 
-  const activeCrisis = activeCrisisId ? crisisScenarios.find(c => c.id === activeCrisisId) : null;
-  const activeCandidates = activeCrisisId ? candidateMaps[activeCrisisId] || [] : [];
+  const defScenario = activeCrisisId ? crisisScenarios.find(c => c.id === activeCrisisId) : null;
+  const activeCrisis = defScenario
+    ? {
+        ...defScenario,
+        label: activeCrisisInfo?.label ?? defScenario.label,
+        location: activeCrisisInfo?.location ?? defScenario.location,
+      }
+    : null;
+  const activeCandidates = useMemo(
+    () =>
+      lastRec
+        ? [
+            {
+              name: lastRec.name,
+              role: lastRec.role,
+              pod: lastRec.pod,
+              bio: lastRec.bio,
+              skill: lastRec.skill,
+              equity: lastRec.equity,
+              score: lastRec.score,
+              rank: 1,
+            },
+          ]
+        : [],
+    [lastRec]
+  );
   const analysisComplete = !isTyping && displayedLines.length > 0;
 
   return (
@@ -562,34 +691,60 @@ function AIEnginePageContent() {
               <div className="text-[clamp(0.8rem,0.9vw,1rem)] font-bold tracking-[0.3em] text-[#6464ff] mb-6">
                 ── SELECT CRISIS EVENT ──
               </div>
-              <div className="space-y-3 flex-1 overflow-y-auto px-1">
-                {crisisScenarios.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => startReasoning(c.id)}
-                    disabled={isTyping}
-                    className={`w-full text-left p-3 border transition-all ${
-                      isTyping ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[#6464ff]/10'
-                    } ${
-                      activeCrisisId === c.id
-                        ? 'border-[#6464ff] bg-[#6464ff]/10 shadow-[0_0_10px_rgba(100,100,255,0.2)]'
-                        : 'border-cyan-500/20 bg-black/40'
-                    }`}
+              <div className="space-y-3 flex-1 overflow-y-auto px-1 min-h-0">
+                {crisisScenarios.map(scenario => (
+                  <div
+                    key={scenario.id}
+                    style={{
+                      padding: '12px',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      background: 'rgba(255,255,255,0.02)',
+                      opacity: 0.35,
+                      cursor: 'not-allowed',
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      color: 'rgba(255,255,255,0.3)',
+                      letterSpacing: '0.15em',
+                    }}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{c.icon}</span>
-                      <div className="flex-1">
-                        <div className="text-[clamp(0.7rem,0.8vw,0.9rem)] font-bold tracking-widest mb-1 text-cyan-100">{c.label}</div>
-                        <div className="text-[clamp(0.55rem,0.65vw,0.7rem)] text-cyan-500/50 uppercase tracking-widest">{c.location}</div>
-                      </div>
-                      <span className={`text-[clamp(0.5rem,0.6vw,0.65rem)] font-bold px-2 py-1 border tracking-widest ${
-                        c.severity === 'CRITICAL' ? 'text-red-400 border-red-500/30' : 'text-amber-400 border-amber-500/30'
-                      }`}>
-                        {c.severity}
-                      </span>
+                    <div style={{ marginBottom: '4px' }}>
+                      {scenario.icon} {scenario.label}
                     </div>
-                  </button>
+                    <div style={{ fontSize: '9px', opacity: 0.5 }}>{scenario.location}</div>
+                    <div
+                      style={{
+                        fontSize: '8px',
+                        marginTop: '4px',
+                        color: 'rgba(0,229,255,0.3)',
+                      }}
+                    >
+                      REQUIRES C1/C2 TRIGGER
+                    </div>
+                  </div>
                 ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '10px 12px',
+                  border: '1px solid rgba(0,229,255,0.1)',
+                  background: 'rgba(0,229,255,0.03)',
+                  fontFamily: 'monospace',
+                  fontSize: '9px',
+                  color: 'rgba(0,229,255,0.4)',
+                  letterSpacing: '0.15em',
+                  lineHeight: 1.8,
+                }}
+              >
+                <div>── HOW TO TRIGGER ──</div>
+                <div style={{ marginTop: '6px', opacity: 0.7 }}>1. Go to POD MONITORING (C1)</div>
+                <div style={{ opacity: 0.7 }}>2. Click a WARNING or CRITICAL pod</div>
+                <div style={{ opacity: 0.7 }}>3. Click VIEW AI ANALYSIS button</div>
+                <div style={{ marginTop: '6px', opacity: 0.5 }}>── OR ──</div>
+                <div style={{ opacity: 0.7 }}>1. Go to HABITAT ALERT (C2)</div>
+                <div style={{ opacity: 0.7 }}>2. Trigger a crisis event</div>
+                <div style={{ opacity: 0.7 }}>3. Click VIEW AI ANALYSIS button</div>
               </div>
 
               <div className="mt-6 border border-cyan-500/20 bg-black/50 p-4">
@@ -615,16 +770,16 @@ function AIEnginePageContent() {
                     <div>
                       <div className="text-[clamp(0.55rem,0.6vw,0.65rem)] text-cyan-500/40 tracking-widest mb-1">ANALYSIS PROGRESS</div>
                       <div className="font-mono text-[clamp(0.7rem,0.8vw,0.9rem)] text-[#6464ff] mb-1">
-                        [{Array.from({ length: 16 }).map((_, i) => i < (currentStep / 5) * 16 ? '█' : '░').join('')}] {Math.round((currentStep / 5) * 100)}%
+                        [{Array.from({ length: 16 }).map((_, i) => i < (currentStep / 4) * 16 ? '█' : '░').join('')}] {Math.round((currentStep / 4) * 100)}%
                       </div>
                       <div className="text-[clamp(0.55rem,0.6vw,0.65rem)] text-cyan-500/50 tracking-widest">
-                        {currentStep > 0 ? `STEP ${currentStep} OF 5` : 'AWAITING START'}
+                        {currentStep > 0 ? `STEP ${currentStep} OF 4` : 'AWAITING START'}
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div className="text-[clamp(0.6rem,0.7vw,0.8rem)] text-cyan-500/50 tracking-widest">
-                    SYSTEM STANDBY · SELECT A CRISIS TO BEGIN ANALYSIS
+                    SYSTEM STANDBY · USE POD MONITORING (C1) OR HABITAT ALERT (C2) TO BEGIN ANALYSIS
                   </div>
                 )}
               </div>
@@ -749,21 +904,45 @@ function AIEnginePageContent() {
                 <div className="text-[clamp(0.7rem,0.8vw,0.9rem)] font-bold tracking-[0.2em] text-[#6464ff] mb-4">
                   ── REASONING HISTORY ──
                 </div>
-                <div className="space-y-2">
-                  {historyData.map((h, i) => (
-                    <div key={i} className="flex items-center justify-between border-b border-cyan-500/10 pb-2 text-[clamp(0.6rem,0.7vw,0.75rem)] tracking-widest">
-                      <div className="w-16 text-cyan-500/40">{h.time}</div>
-                      <div className="flex-1 text-cyan-200">{h.crisis}</div>
-                      <div className="w-32 text-cyan-400">{h.recommended}</div>
-                      <div className="w-16 text-right text-cyan-500/60 mr-4">{h.score}</div>
-                      <div className={`w-24 text-center px-1 py-0.5 border text-[clamp(0.5rem,0.55vw,0.6rem)] ${
-                        h.action === 'ACCEPTED' ? 'text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/10' : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
-                      }`}>
-                        {h.action}
+                {reasoningHistory.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '24px',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                      fontSize: '10px',
+                      color: 'rgba(0,229,255,0.2)',
+                      letterSpacing: '0.2em',
+                    }}
+                  >
+                    NO REASONING HISTORY · TRIGGER A CRISIS TO BEGIN
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {reasoningHistory.map((h, i) => (
+                      <div
+                        key={h.id || i}
+                        className="flex items-center justify-between border-b border-cyan-500/10 pb-2 text-[clamp(0.6rem,0.7vw,0.75rem)] tracking-widest"
+                      >
+                        <div className="w-16 text-cyan-500/40">{h.time}</div>
+                        <div className="flex-1 text-cyan-200">{h.crisis}</div>
+                        <div className="w-32 text-cyan-400">{h.recommended}</div>
+                        <div className="w-16 text-right text-cyan-500/60 mr-4">{h.score}</div>
+                        <div
+                          className={`w-24 text-center px-1 py-0.5 border text-[clamp(0.5rem,0.55vw,0.6rem)] ${
+                            h.action === 'ACCEPTED'
+                              ? 'text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/10'
+                              : h.action === 'OVERRIDDEN'
+                                ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                                : 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10'
+                          }`}
+                        >
+                          {h.action}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Section C */}
