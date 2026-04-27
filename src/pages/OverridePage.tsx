@@ -388,14 +388,26 @@ export default function OverridePage() {
   const handleConfirmOverride = (id: string) => {
     const dec = decisions.find(d => d.id === id);
     setDecisions(prev => prev.map(d => (d.id === id ? { ...d, status: 'OVERRIDDEN' as const } : d)));
+
     if (dec) {
+      // C1: location SECTOR POD-* — set pod OVERRIDDEN so C1 can reflect disabled state.
+      // C2: e.g. B1-R2 — do not set any podOverride_*; leave C1 / pod storage unchanged.
+      const isFromC1 = dec.location?.startsWith('SECTOR POD-');
+      if (isFromC1) {
+        try {
+          localStorage.setItem(`podOverride_${dec.recommendedPod}`, 'OVERRIDDEN');
+          window.dispatchEvent(new Event('aeonguard:podOverride'));
+        } catch {
+          /* noop */
+        }
+      }
       try {
-        localStorage.setItem(`podOverride_${dec.recommendedPod}`, 'OVERRIDDEN');
-        window.dispatchEvent(new Event('aeonguard:podOverride'));
+        localStorage.setItem('crisisOverridden', 'true');
       } catch {
         /* noop */
       }
     }
+
     try {
       const oRaw = localStorage.getItem('pendingDecisions') || '[]';
       const oStored = JSON.parse(oRaw) as { id: string; status?: string }[];
@@ -403,11 +415,6 @@ export default function OverridePage() {
         'pendingDecisions',
         JSON.stringify(oStored.map(s => (s.id === id ? { ...s, status: 'OVERRIDDEN' as const } : s)))
       );
-    } catch {
-      /* noop */
-    }
-    try {
-      localStorage.setItem('crisisOverridden', 'true');
     } catch {
       /* noop */
     }
